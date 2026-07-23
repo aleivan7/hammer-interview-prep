@@ -54,11 +54,13 @@ class TransactionController extends Controller
          * Do not paste a finished solution under this comment.
          * Returning the unchanged model keeps the app runnable while you learn.
          */
+        $data = $request->validated();
         $transaction->update([
-            'category' => $request->input('category'),
-            'reviewed_at' => $request->input('reviewed') ? now() : null,
+            'category' => $data['category'],
+            'reviewed_at' => $data['reviewed'] ? now() : null,
         ]);
-        
+
+
         return new TransactionResource($transaction);
     }
 }
