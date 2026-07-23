@@ -1,0 +1,8 @@
+# Local PHP SQLite modules used only when the system package is missing
+.php-ext/
+
+# OS / editor
+.DS_Store
+*.log
+.idea/
+.vscode/
