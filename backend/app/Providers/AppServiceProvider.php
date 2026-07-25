@@ -2,6 +2,8 @@
 
 namespace App\Providers;
 
+use App\Contracts\TransactionCategorizer;
+use App\Services\RulesAndHeuristicsCategorizer;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -11,7 +13,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->bind(TransactionCategorizer::class, RulesAndHeuristicsCategorizer::class);
     }
 
     /**

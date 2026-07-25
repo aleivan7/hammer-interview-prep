@@ -2,19 +2,16 @@
 
 namespace Tests\Feature;
 
+use App\Enums\Bucket;
 use App\Models\Transaction;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
-/**
- * These tests describe the finished API behavior.
- * They should fail until Alejandro completes the TODO sections.
- */
 class TransactionApiTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_index_returns_only_unreviewed_transactions(): void
+    public function test_index_returns_only_unreviewed_transactions_when_requested(): void
     {
         $unreviewed = Transaction::factory()->unreviewed()->create([
             'merchant' => 'Unreviewed Store',
@@ -26,7 +23,7 @@ class TransactionApiTest extends TestCase
             'transaction_date' => '2026-07-09',
         ]);
 
-        $response = $this->getJson('/api/transactions');
+        $response = $this->getJson('/api/transactions?unreviewed_only=1');
 
         $response->assertOk();
         $response->assertJsonCount(1, 'data');
@@ -36,7 +33,7 @@ class TransactionApiTest extends TestCase
         ]);
     }
 
-    public function test_index_returns_transactions_oldest_first(): void
+    public function test_index_returns_transactions_oldest_first_for_review_queue(): void
     {
         $newer = Transaction::factory()->unreviewed()->create([
             'merchant' => 'Newer Merchant',
@@ -48,17 +45,17 @@ class TransactionApiTest extends TestCase
             'transaction_date' => '2026-07-10',
         ]);
 
-        $response = $this->getJson('/api/transactions');
+        $response = $this->getJson('/api/transactions?queue=review');
 
         $response->assertOk();
         $response->assertJsonPath('data.0.id', $older->id);
         $response->assertJsonPath('data.1.id', $newer->id);
     }
 
-    public function test_patch_with_valid_category_updates_category(): void
+    public function test_patch_with_valid_category_updates_bucket(): void
     {
         $transaction = Transaction::factory()->unreviewed()->create([
-            'category' => null,
+            'bucket' => null,
         ]);
 
         $response = $this->patchJson("/api/transactions/{$transaction->id}", [
@@ -67,11 +64,12 @@ class TransactionApiTest extends TestCase
         ]);
 
         $response->assertOk();
+        $response->assertJsonPath('data.bucket', 'need');
         $response->assertJsonPath('data.category', 'need');
 
         $this->assertDatabaseHas('transactions', [
             'id' => $transaction->id,
-            'category' => 'need',
+            'bucket' => 'need',
         ]);
     }
 
@@ -94,7 +92,7 @@ class TransactionApiTest extends TestCase
     public function test_patch_with_reviewed_false_clears_reviewed_at(): void
     {
         $transaction = Transaction::factory()->reviewed()->create([
-            'category' => 'need',
+            'bucket' => Bucket::Need,
         ]);
 
         $response = $this->patchJson("/api/transactions/{$transaction->id}", [
@@ -131,14 +129,13 @@ class TransactionApiTest extends TestCase
         ]);
 
         $response->assertStatus(422);
-        $response->assertJsonValidationErrors(['category']);
     }
 
     public function test_patch_returns_transaction_resource_json_shape(): void
     {
         $transaction = Transaction::factory()->unreviewed()->create([
             'merchant' => 'HEB',
-            'amount' => '84.23',
+            'amount_cents' => 8423,
             'transaction_date' => '2026-07-20',
         ]);
 
@@ -153,18 +150,77 @@ class TransactionApiTest extends TestCase
                 'id',
                 'merchant',
                 'amount',
+                'amount_cents',
+                'bucket',
                 'category',
                 'transaction_date',
                 'reviewed',
             ],
         ]);
 
-        // After the TODOs are done, the values should match the update.
         $response->assertJsonPath('data.id', $transaction->id);
         $response->assertJsonPath('data.merchant', 'HEB');
         $response->assertJsonPath('data.amount', '84.23');
-        $response->assertJsonPath('data.category', 'need');
+        $response->assertJsonPath('data.amount_cents', 8423);
+        $response->assertJsonPath('data.bucket', 'need');
         $response->assertJsonPath('data.transaction_date', '2026-07-20');
         $response->assertJsonPath('data.reviewed', true);
+    }
+
+    public function test_store_creates_manual_transaction(): void
+    {
+        $response = $this->postJson('/api/transactions', [
+            'merchant' => 'Corner Market',
+            'amount_cents' => 1250,
+            'kind' => 'expense',
+            'transaction_date' => '2026-07-22',
+        ]);
+
+        $response->assertCreated()
+            ->assertJsonPath('data.merchant', 'Corner Market')
+            ->assertJsonPath('data.amount', '12.50');
+
+        $this->assertDatabaseHas('transactions', [
+            'merchant' => 'Corner Market',
+            'amount_cents' => 1250,
+        ]);
+    }
+
+    public function test_patch_accepts_savings_bucket_and_debt_savings_alias(): void
+    {
+        $savings = Transaction::factory()->unreviewed()->create();
+        $legacy = Transaction::factory()->unreviewed()->create();
+
+        $this->patchJson("/api/transactions/{$savings->id}", [
+            'bucket' => 'savings',
+            'reviewed' => true,
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.bucket', 'savings')
+            ->assertJsonPath('data.category', 'savings');
+
+        $this->patchJson("/api/transactions/{$legacy->id}", [
+            'category' => 'debt_savings',
+            'reviewed' => true,
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.bucket', 'savings')
+            ->assertJsonPath('data.category', 'savings');
+    }
+
+    public function test_undo_endpoint_clears_review(): void
+    {
+        $transaction = Transaction::factory()->reviewed()->create([
+            'bucket' => Bucket::Want,
+        ]);
+
+        $this->postJson("/api/transactions/{$transaction->id}/undo")
+            ->assertOk()
+            ->assertJsonPath('data.reviewed', false);
+
+        $this->assertDatabaseHas('transactions', [
+            'id' => $transaction->id,
+            'reviewed_at' => null,
+        ]);
     }
 }

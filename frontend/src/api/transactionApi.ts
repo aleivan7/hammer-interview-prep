@@ -1,69 +1,107 @@
 import type {
+  StoreTransactionPayload,
+  SuggestionResourceResponse,
   Transaction,
   TransactionCollectionResponse,
   TransactionResourceResponse,
+  TransactionSuggestion,
   UpdateTransactionPayload,
 } from '../types/transaction'
+import { apiFetch } from './http'
 
-/**
- * Fetch helpers for the transaction review API.
- * Uses relative /api URLs so Vite can proxy them to Laravel in development.
- */
-
-async function readErrorMessage(response: Response): Promise<string> {
-  try {
-    const body = (await response.json()) as {
-      message?: string
-      errors?: Record<string, string[]>
-    }
-
-    if (body.errors) {
-      const firstError = Object.values(body.errors).flat()[0]
-      if (firstError) {
-        return firstError
-      }
-    }
-
-    if (body.message) {
-      return body.message
-    }
-  } catch {
-    // Response was not JSON; fall through to a generic message.
-  }
-
-  return `Request failed with status ${response.status}`
+export interface FetchTransactionsParams {
+  unreviewedOnly?: boolean
+  queue?: 'review'
+  reviewed?: boolean
+  bucket?: string
+  accountId?: number | null
+  search?: string
+  paginate?: boolean
 }
 
-/** GET /api/transactions — unreviewed transactions, oldest first (once backend is done). */
-export async function fetchTransactions(): Promise<Transaction[]> {
-  const response = await fetch('/api/transactions')
+function toQuery(params: FetchTransactionsParams = {}): string {
+  const query = new URLSearchParams()
 
-  if (!response.ok) {
-    throw new Error(await readErrorMessage(response))
+  if (params.unreviewedOnly) {
+    query.set('unreviewed_only', '1')
   }
 
-  const json = (await response.json()) as TransactionCollectionResponse
+  if (params.queue) {
+    query.set('queue', params.queue)
+  }
+
+  if (params.reviewed !== undefined) {
+    query.set('reviewed', String(params.reviewed))
+  }
+
+  if (params.bucket) {
+    query.set('bucket', params.bucket)
+  }
+
+  if (params.accountId != null) {
+    query.set('account_id', String(params.accountId))
+  }
+
+  if (params.search?.trim()) {
+    query.set('search', params.search.trim())
+  }
+
+  if (params.paginate === false) {
+    query.set('paginate', 'false')
+  }
+
+  const serialized = query.toString()
+  return serialized ? `?${serialized}` : ''
+}
+
+/** GET /api/transactions — defaults to newest-first paginated list. */
+export async function fetchTransactions(
+  params: FetchTransactionsParams = {},
+): Promise<Transaction[]> {
+  const json = await apiFetch<TransactionCollectionResponse>(
+    `/api/transactions${toQuery(params)}`,
+  )
   return json.data
 }
 
-/** PATCH /api/transactions/{id} — categorize and mark reviewed. */
+/** Review queue: unreviewed, oldest first. */
+export async function fetchReviewQueue(): Promise<Transaction[]> {
+  return fetchTransactions({ queue: 'review' })
+}
+
+export async function createTransaction(
+  payload: StoreTransactionPayload,
+): Promise<Transaction> {
+  const json = await apiFetch<TransactionResourceResponse>('/api/transactions', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+  return json.data
+}
+
 export async function updateTransaction(
   id: number,
   payload: UpdateTransactionPayload,
 ): Promise<Transaction> {
-  const response = await fetch(`/api/transactions/${id}`, {
+  const json = await apiFetch<TransactionResourceResponse>(`/api/transactions/${id}`, {
     method: 'PATCH',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-    },
     body: JSON.stringify(payload),
   })
+  return json.data
+}
 
-  if (!response.ok) {
-    throw new Error(await readErrorMessage(response))
-  }
+export async function undoTransactionReview(id: number): Promise<Transaction> {
+  const json = await apiFetch<TransactionResourceResponse>(`/api/transactions/${id}/undo`, {
+    method: 'POST',
+  })
+  return json.data
+}
 
-  const json = (await response.json()) as TransactionResourceResponse
+export async function fetchTransactionSuggestion(
+  id: number,
+): Promise<TransactionSuggestion> {
+  const json = await apiFetch<SuggestionResourceResponse>(
+    `/api/transactions/${id}/suggestion`,
+  )
   return json.data
 }

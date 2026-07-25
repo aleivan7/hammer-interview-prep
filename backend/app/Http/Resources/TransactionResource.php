@@ -2,30 +2,41 @@
 
 namespace App\Http\Resources;
 
+use App\Services\Money;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 class TransactionResource extends JsonResource
 {
     /**
-     * Transform the resource into an array.
-     *
      * @return array<string, mixed>
      */
     public function toArray(Request $request): array
     {
-        // Explicit API shape for the Vue frontend.
         return [
             'id' => $this->id,
+            'account_id' => $this->account_id,
+            'account' => $this->whenLoaded('account', fn () => [
+                'id' => $this->account?->id,
+                'name' => $this->account?->name,
+                'institution_name' => $this->account?->institution_name,
+            ]),
             'merchant' => $this->merchant,
-            // Keep amount as a two-decimal string for stable JSON.
-            'amount' => number_format((float) $this->amount, 2, '.', ''),
-            'category' => $this->category,
+            'amount_cents' => $this->amount_cents,
+            'amount' => Money::centsToDollarString((int) $this->amount_cents),
+            'kind' => $this->kind?->value ?? $this->kind,
+            'bucket' => $this->bucket?->value,
+            'subcategory' => $this->subcategory,
             'transaction_date' => $this->transaction_date instanceof \DateTimeInterface
                 ? $this->transaction_date->format('Y-m-d')
                 : $this->transaction_date,
-            // Frontend receives a boolean instead of the raw reviewed_at timestamp.
             'reviewed' => $this->reviewed_at !== null,
+            'review_source' => $this->review_source?->value,
+            'confidence' => $this->confidence,
+            'review_explanation' => $this->review_explanation,
+            'notes' => $this->notes,
+            // Legacy alias used by older clients/tests during transition.
+            'category' => $this->bucket?->value,
         ];
     }
 }
