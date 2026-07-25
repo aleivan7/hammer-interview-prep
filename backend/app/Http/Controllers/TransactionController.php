@@ -9,20 +9,28 @@ use App\Http\Requests\UpdateTransactionRequest;
 use App\Http\Resources\TransactionResource;
 use App\Models\Transaction;
 use App\Services\TransactionReviewService;
+use App\Support\DemoUserContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException;
 
 class TransactionController extends Controller
 {
     public function __construct(
         private readonly TransactionReviewService $reviewService,
+        private readonly DemoUserContext $demoUser,
     ) {}
 
     public function index(Request $request): AnonymousResourceCollection
     {
-        $query = Transaction::query()->with('account')->orderByDesc('transaction_date')->orderByDesc('id');
+        $user = $this->demoUser->user();
+        $query = Transaction::query()
+            ->forUser($user)
+            ->with('account')
+            ->orderByDesc('transaction_date')
+            ->orderByDesc('id');
 
         if ($request->boolean('unreviewed_only') || $request->query('queue') === 'review') {
             $query->unreviewed()->reorder()->orderBy('transaction_date')->orderBy('id');
@@ -54,10 +62,12 @@ class TransactionController extends Controller
 
     public function store(StoreTransactionRequest $request): JsonResponse
     {
+        $user = $this->demoUser->user();
         $data = $request->validated();
         $reviewed = (bool) ($data['reviewed'] ?? false);
 
         $transaction = Transaction::query()->create([
+            'user_id' => $user->id,
             'account_id' => $data['account_id'] ?? null,
             'merchant' => $data['merchant'],
             'amount_cents' => $data['amount_cents'],
@@ -79,6 +89,8 @@ class TransactionController extends Controller
         UpdateTransactionRequest $request,
         Transaction $transaction,
     ): TransactionResource {
+        $this->ensureOwned($transaction);
+
         $data = $request->validated();
         $attributes = collect($data)->except(['reviewed', 'category'])->all();
 
@@ -122,11 +134,15 @@ class TransactionController extends Controller
 
     public function undo(Transaction $transaction): TransactionResource
     {
+        $this->ensureOwned($transaction);
+
         return new TransactionResource($this->reviewService->undo($transaction)->load('account'));
     }
 
     public function suggestion(Transaction $transaction): JsonResponse
     {
+        $this->ensureOwned($transaction);
+
         $result = $this->reviewService->suggest($transaction);
 
         return response()->json([
@@ -139,5 +155,12 @@ class TransactionController extends Controller
                 'auto_review' => $result->autoReview,
             ],
         ]);
+    }
+
+    private function ensureOwned(Transaction $transaction): void
+    {
+        if ((int) $transaction->user_id !== $this->demoUser->id()) {
+            throw new NotFoundHttpException('Transaction not found.');
+        }
     }
 }

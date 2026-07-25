@@ -18,6 +18,7 @@ class Transaction extends Model
     use HasFactory;
 
     protected $fillable = [
+        'user_id',
         'account_id',
         'merchant',
         'amount_cents',
@@ -36,6 +37,7 @@ class Transaction extends Model
     protected function casts(): array
     {
         return [
+            'user_id' => 'integer',
             'account_id' => 'integer',
             'amount_cents' => 'integer',
             'kind' => TransactionKind::class,
@@ -47,6 +49,11 @@ class Transaction extends Model
         ];
     }
 
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
+    }
+
     public function account(): BelongsTo
     {
         return $this->belongsTo(Account::class);
@@ -55,6 +62,11 @@ class Transaction extends Model
     public function reviewAudits(): HasMany
     {
         return $this->hasMany(ReviewAudit::class);
+    }
+
+    public function scopeForUser(Builder $query, User $user): Builder
+    {
+        return $query->where('user_id', $user->id);
     }
 
     public function scopeUnreviewed(Builder $query): Builder

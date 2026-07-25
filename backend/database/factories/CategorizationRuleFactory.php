@@ -4,6 +4,7 @@ namespace Database\Factories;
 
 use App\Enums\Bucket;
 use App\Models\CategorizationRule;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
@@ -16,6 +17,7 @@ class CategorizationRuleFactory extends Factory
     public function definition(): array
     {
         return [
+            'user_id' => User::factory(),
             'name' => 'Netflix is a want',
             'merchant_contains' => 'netflix',
             'account_id' => null,

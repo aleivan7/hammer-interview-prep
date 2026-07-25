@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Enums\Bucket;
 use App\Models\Account;
 use App\Models\CategorizationRule;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use PHPUnit\Framework\Attributes\TestDox;
 use Tests\TestCase;
@@ -16,12 +17,20 @@ class CategorizationRuleApiTest extends TestCase
 {
     use RefreshDatabase;
 
+    private User $user;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->user = $this->withDemoUser();
+    }
+
     #[TestDox('Creates, lists (priority-ordered), updates, and deletes categorization rules')]
     public function test_rules_crud_and_priority_ordering(): void
     {
-        $account = Account::factory()->create();
+        $account = Account::factory()->for($this->user)->create();
 
-        $higherPriority = CategorizationRule::factory()->create([
+        $higherPriority = CategorizationRule::factory()->for($this->user)->create([
             'name' => 'Later rule',
             'merchant_contains' => 'later',
             'priority' => 20,
@@ -43,7 +52,13 @@ class CategorizationRuleApiTest extends TestCase
         $create->assertCreated()
             ->assertJsonPath('data.name', 'Landlord rent')
             ->assertJsonPath('data.target_bucket', 'need')
-            ->assertJsonPath('data.priority', 5);
+            ->assertJsonPath('data.priority', 5)
+            ->assertJsonPath('data.id', $create->json('data.id'));
+
+        $this->assertDatabaseHas('categorization_rules', [
+            'id' => $create->json('data.id'),
+            'user_id' => $this->user->id,
+        ]);
 
         $index = $this->getJson('/api/rules');
         $index->assertOk()
@@ -83,7 +98,7 @@ class CategorizationRuleApiTest extends TestCase
     #[TestDox('Rejects patching amount max below the rule’s existing amount min')]
     public function test_patch_rejects_amount_max_below_existing_min(): void
     {
-        $rule = CategorizationRule::factory()->create([
+        $rule = CategorizationRule::factory()->for($this->user)->create([
             'amount_cents_min' => 5000,
             'amount_cents_max' => 10_000,
         ]);
@@ -98,6 +113,45 @@ class CategorizationRuleApiTest extends TestCase
             'id' => $rule->id,
             'amount_cents_min' => 5000,
             'amount_cents_max' => 10_000,
+        ]);
+    }
+
+    #[TestDox('Rules are scoped to the selected demo user')]
+    public function test_rules_are_scoped_to_selected_user(): void
+    {
+        $other = User::factory()->reckless()->create();
+        CategorizationRule::factory()->for($other)->create([
+            'name' => 'Foreign rule',
+            'merchant_contains' => 'foreign',
+            'priority' => 1,
+        ]);
+
+        CategorizationRule::factory()->for($this->user)->create([
+            'name' => 'Own rule',
+            'merchant_contains' => 'own',
+            'priority' => 2,
+        ]);
+
+        $this->getJson('/api/rules')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.name', 'Own rule');
+    }
+
+    #[TestDox('Creating a rule assigns the selected demo user')]
+    public function test_creating_a_rule_assigns_selected_user(): void
+    {
+        $this->postJson('/api/rules', [
+            'name' => 'Assigned rule',
+            'merchant_contains' => 'coffee',
+            'target_bucket' => 'want',
+        ])
+            ->assertCreated()
+            ->assertJsonPath('data.name', 'Assigned rule');
+
+        $this->assertDatabaseHas('categorization_rules', [
+            'name' => 'Assigned rule',
+            'user_id' => $this->user->id,
         ]);
     }
 }

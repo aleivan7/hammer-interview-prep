@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Services\SmartReviewService;
+use App\Support\DemoUserContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -10,6 +11,7 @@ class SmartReviewController extends Controller
 {
     public function __construct(
         private readonly SmartReviewService $smartReview,
+        private readonly DemoUserContext $demoUser,
     ) {}
 
     public function store(Request $request): JsonResponse
@@ -24,7 +26,10 @@ class SmartReviewController extends Controller
             ],
         ]);
 
-        $result = $this->smartReview->run($validated['batch_key'] ?? null);
+        $result = $this->smartReview->run(
+            $this->demoUser->user(),
+            $validated['batch_key'] ?? null,
+        );
 
         return response()->json(['data' => $result]);
     }

@@ -1,5 +1,6 @@
 import type { Account } from './account'
 import type { Bucket } from './bucket'
+import type { DemoPersonaIdentity } from './demoUser'
 import type { Transaction } from './transaction'
 
 export interface SafeToSpendBreakdown {
@@ -52,11 +53,7 @@ export interface PlannedCashFlow {
 }
 
 export interface DashboardData {
-  persona: {
-    name: string
-    email: string
-    member_since: string
-  }
+  persona: DemoPersonaIdentity
   safe_to_spend: SafeToSpend
   plan: FinancialPlanSummary | null
   cash_flows: PlannedCashFlow[]

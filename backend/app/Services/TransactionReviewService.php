@@ -30,7 +30,10 @@ final class TransactionReviewService
             $transaction = Transaction::query()->lockForUpdate()->findOrFail($transaction->id);
 
             if ($idempotencyKey !== null) {
-                $existing = Transaction::query()->where('idempotency_key', $idempotencyKey)->first();
+                $existing = Transaction::query()
+                    ->where('user_id', $transaction->user_id)
+                    ->where('idempotency_key', $idempotencyKey)
+                    ->first();
                 if ($existing !== null) {
                     return $existing;
                 }

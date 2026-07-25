@@ -5,6 +5,7 @@ namespace App\Http\Requests;
 use App\Enums\Bucket;
 use App\Enums\TransactionKind;
 use App\Models\Transaction;
+use App\Support\DemoUserContext;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -13,7 +14,13 @@ class UpdateTransactionRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return true;
+        $transaction = $this->route('transaction');
+
+        if (! $transaction instanceof Transaction) {
+            return false;
+        }
+
+        return (int) $transaction->user_id === app(DemoUserContext::class)->id();
     }
 
     protected function prepareForValidation(): void
@@ -37,6 +44,8 @@ class UpdateTransactionRequest extends FormRequest
      */
     public function rules(): array
     {
+        $userId = app(DemoUserContext::class)->id();
+
         return [
             'merchant' => ['sometimes', 'string', 'max:255'],
             'amount_cents' => ['sometimes', 'integer', 'min:0', 'max:100000000'],
@@ -48,7 +57,12 @@ class UpdateTransactionRequest extends FormRequest
             ],
             'subcategory' => ['sometimes', 'nullable', 'string', 'max:100'],
             'transaction_date' => ['sometimes', 'date'],
-            'account_id' => ['sometimes', 'nullable', 'integer', 'exists:accounts,id'],
+            'account_id' => [
+                'sometimes',
+                'nullable',
+                'integer',
+                Rule::exists('accounts', 'id')->where(fn ($query) => $query->where('user_id', $userId)),
+            ],
             'notes' => ['sometimes', 'nullable', 'string', 'max:1000'],
             'reviewed' => ['sometimes', 'boolean'],
             'category' => [

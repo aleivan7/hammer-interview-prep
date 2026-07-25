@@ -25,5 +25,9 @@ Include:
 - Do not commit real bank credentials, Plaid secrets, or personal financial
   data.
 - Prefer synthetic seed data for demos.
+- ClearSpend’s `X-Demo-User` header is a **demo tenancy selector**, not secure
+  authentication. Do not describe it as production auth.
+- Even in this demo model, financial endpoints must not leak one persona’s
+  records to another selected persona.
 - Treat financial calculation bugs as security-relevant integrity issues.
 - CI and agent workflows must not print secrets or dump `.env` contents.

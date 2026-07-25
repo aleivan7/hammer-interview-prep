@@ -3,6 +3,7 @@
 namespace Database\Factories;
 
 use App\Models\FinancialPlan;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
@@ -15,6 +16,7 @@ class FinancialPlanFactory extends Factory
     public function definition(): array
     {
         return [
+            'user_id' => User::factory(),
             'needs_percent' => 50,
             'wants_percent' => 30,
             'savings_percent' => 20,

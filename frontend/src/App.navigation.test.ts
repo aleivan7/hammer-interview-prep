@@ -1,20 +1,23 @@
 /**
- * App shell navigation
- * - mounts Overview and can reach Activity, Review, and Rules routes
+ * App shell navigation and demo-user route protection
  */
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { createMemoryHistory, createRouter, type Router } from 'vue-router'
+import { createMemoryHistory, createRouter } from 'vue-router'
+// createMemoryHistory used by createAppRouter in tests
 import App from './App.vue'
 import { fetchDashboard } from './api/dashboardApi'
 import { fetchAccounts } from './api/accountApi'
-import { fetchReviewQueue, fetchTransactionSuggestion } from './api/transactionApi'
+import { fetchProfile } from './api/profileApi'
+import { fetchReviewQueue, fetchTransactionSuggestion, fetchTransactions } from './api/transactionApi'
 import { fetchRules } from './api/rulesApi'
-import { fetchTransactions } from './api/transactionApi'
-import ActivityView from './views/ActivityView.vue'
-import OverviewView from './views/OverviewView.vue'
-import RulesView from './views/RulesView.vue'
-import TransactionReviewView from './views/TransactionReviewView.vue'
+import { createAppRouter, routes } from './router'
+import {
+  DEMO_USER_STORAGE_KEY,
+  __resetDemoUserSessionForTests,
+  clearSelectedDemoUser,
+  setSelectedDemoUserId,
+} from './session/demoUserSession'
 
 vi.mock('./api/dashboardApi', () => ({
   fetchDashboard: vi.fn(),
@@ -44,29 +47,56 @@ vi.mock('./api/smartReviewApi', () => ({
   runSmartReview: vi.fn(),
 }))
 
-function makeRouter(): Router {
-  return createRouter({
-    history: createMemoryHistory(),
-    routes: [
-      { path: '/', name: 'overview', component: OverviewView, meta: { title: 'Overview' } },
-      { path: '/activity', name: 'activity', component: ActivityView, meta: { title: 'Activity' } },
-      {
-        path: '/review',
-        name: 'review',
-        component: TransactionReviewView,
-        meta: { title: 'Review' },
-      },
-      { path: '/rules', name: 'rules', component: RulesView, meta: { title: 'Rules' } },
-    ],
-  })
+vi.mock('./api/profileApi', () => ({
+  fetchProfile: vi.fn(),
+  resetDemoProfile: vi.fn(),
+}))
+
+vi.mock('./api/demoUserApi', () => ({
+  fetchDemoUsers: vi.fn().mockResolvedValue([]),
+}))
+
+const profile = {
+  id: 2,
+  name: 'Jordan Lee',
+  email: 'jordan.lee@clearspend.demo',
+  persona_type: 'average' as const,
+  persona_label: 'Average Spender',
+  description: 'Balanced persona',
+  member_since: '2026-01-01',
+  avatar_initials: 'JL',
+  monthly_income_cents: 520000,
+  monthly_income: '5200.00',
+  total_balance_cents: 100000,
+  total_balance: '1000.00',
+  account_count: 3,
+  plan: {
+    needs_percent: 50,
+    wants_percent: 30,
+    savings_percent: 20,
+    safety_buffer_cents: 25000,
+    safety_buffer: '250.00',
+    monthly_income_cents: 520000,
+    monthly_income: '5200.00',
+  },
+  accounts: [],
+  financial_status_label: 'Balanced and on track',
 }
 
 beforeEach(() => {
+  localStorage.clear()
+  __resetDemoUserSessionForTests()
+  setSelectedDemoUserId(2)
+
+  vi.mocked(fetchProfile).mockResolvedValue(profile)
   vi.mocked(fetchDashboard).mockResolvedValue({
     persona: {
+      id: 2,
       name: 'Jordan Lee',
       email: 'jordan.lee@clearspend.demo',
       member_since: '2026-01-01',
+      avatar_initials: 'JL',
+      persona_label: 'Average Spender',
     },
     safe_to_spend: {
       safe_to_spend_cents: 10000,
@@ -118,9 +148,42 @@ beforeEach(() => {
 })
 
 describe('App navigation shell', () => {
-  /** Renders ClearSpend overview, then navigates to Activity, Review, and Rules. */
-  it('mounts overview and navigates between primary routes', async () => {
-    const router = makeRouter()
+  it('redirects an unauthenticated visitor to /login', async () => {
+    clearSelectedDemoUser()
+    const router = createAppRouter(createMemoryHistory())
+    await router.push('/')
+    await flushPromises()
+
+    expect(router.currentRoute.value.name).toBe('login')
+  })
+
+  it('clears a stale selected id and redirects to login', async () => {
+    const { ApiError } = await import('./api/http')
+    vi.mocked(fetchProfile).mockRejectedValue(
+      new ApiError('The selected demo user is invalid.', 401, 'demo_user_invalid'),
+    )
+
+    const router = createAppRouter(createMemoryHistory())
+    await router.push('/')
+    await flushPromises()
+
+    expect(router.currentRoute.value.name).toBe('login')
+    expect(localStorage.getItem(DEMO_USER_STORAGE_KEY)).toBeNull()
+  })
+
+  it('mounts overview, shows the selected persona, and navigates primary routes', async () => {
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes,
+    })
+    router.beforeEach(async (to) => {
+      if (to.meta.public) {
+        return true
+      }
+      await fetchProfile()
+      return true
+    })
+
     router.push('/')
     await router.isReady()
 
@@ -132,6 +195,8 @@ describe('App navigation shell', () => {
 
     await flushPromises()
     expect(wrapper.text()).toContain('ClearSpend')
+    expect(wrapper.text()).toContain('Jordan Lee')
+    expect(wrapper.text()).toContain('Average Spender')
     expect(wrapper.text()).toContain('Safe to spend')
     expect(wrapper.text()).toContain('$100.00')
 
@@ -146,5 +211,9 @@ describe('App navigation shell', () => {
     await router.push('/rules')
     await flushPromises()
     expect(wrapper.text()).toContain('New rule')
+
+    await router.push('/profile')
+    await flushPromises()
+    expect(wrapper.text()).toContain('Switch demo user')
   })
 })

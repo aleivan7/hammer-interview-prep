@@ -23,13 +23,18 @@ From the repository root:
 
 ## Conventions
 
-- Keep the API public and stateless; do not add authentication unless requested.
+- Keep the API public and stateless. ClearSpend uses a **demo persona-selection
+  flow** (`X-Demo-User` header + `localStorage`), not production authentication.
+  Do not add Sanctum, Breeze, passwords, cookies, JWT, or OAuth unless
+  explicitly requested.
+- Scope all financial queries to the resolved demo user. Route-model binding
+  alone is not sufficient ownership protection.
 - Use conventional Laravel controllers, Form Requests, Resources, Eloquent
   models, migrations, factories, and feature tests.
 - Use Vue Composition API with `<script setup lang="ts">`, native `fetch`, and
-  small components. Vue Router is approved for ClearSpend’s four routes
-  (Overview, Activity, Review, Rules). Do not add Pinia, Axios, or a UI
-  framework without a demonstrated need.
+  small components. Vue Router is approved for ClearSpend routes (`/login`,
+  Overview, Activity, Review, Rules, `/profile`). Do not add Pinia, Axios, or a
+  UI framework without a demonstrated need.
 - Keep API request/response types explicit and preserve Laravel Resource
   `{ "data": ... }` envelopes.
 - Use SQLite locally and in backend tests.

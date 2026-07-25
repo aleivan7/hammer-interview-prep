@@ -8,6 +8,7 @@ use App\Models\Account;
 use App\Models\FinancialPlan;
 use App\Models\PlannedCashFlow;
 use App\Models\Transaction;
+use App\Models\User;
 use App\Services\SafeToSpendService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
@@ -24,7 +25,9 @@ class SafeToSpendServiceTest extends TestCase
     #[TestDox('Computes safe-to-spend from integer account balances, income, bills, and savings target')]
     public function test_cent_math_uses_integer_balances_and_targets(): void
     {
-        FinancialPlan::factory()->create([
+        $user = User::factory()->average()->create();
+
+        FinancialPlan::factory()->for($user)->create([
             'needs_percent' => 50,
             'wants_percent' => 30,
             'savings_percent' => 20,
@@ -32,27 +35,25 @@ class SafeToSpendServiceTest extends TestCase
             'monthly_income_cents' => 520_000,
         ]);
 
-        Account::factory()->create(['balance_cents' => 100_000]);
-        Account::factory()->create(['balance_cents' => 50_050]);
+        Account::factory()->for($user)->create(['balance_cents' => 100_000]);
+        Account::factory()->for($user)->create(['balance_cents' => 50_050]);
 
-        PlannedCashFlow::factory()->create([
+        PlannedCashFlow::factory()->for($user)->create([
             'name' => 'Paycheck',
             'kind' => 'income',
             'amount_cents' => 260_000,
             'due_on' => '2026-07-28',
         ]);
 
-        PlannedCashFlow::factory()->bill()->create([
+        PlannedCashFlow::factory()->for($user)->bill()->create([
             'name' => 'Rent',
             'amount_cents' => 165_000,
             'due_on' => '2026-07-30',
         ]);
 
         $asOf = Carbon::parse('2026-07-25');
-        $result = app(SafeToSpendService::class)->forPeriod($asOf);
+        $result = app(SafeToSpendService::class)->forUser($user, $asOf);
 
-        // 100000 + 50050 + 260000 - 165000 - remaining savings (104000) - 25000
-        // savings target = 20% of 520000 = 104000; no savings spent yet
         $this->assertSame(116_050, $result['safe_to_spend_cents']);
         $this->assertSame('1160.50', $result['amount']);
         $this->assertSame(150_050, $result['breakdown']['available_cash_cents']);
@@ -62,28 +63,30 @@ class SafeToSpendServiceTest extends TestCase
     #[TestDox('Excludes transfer transactions from bucket spending actuals')]
     public function test_transfers_are_excluded_from_bucket_spending(): void
     {
-        FinancialPlan::factory()->create([
+        $user = User::factory()->average()->create();
+
+        FinancialPlan::factory()->for($user)->create([
             'monthly_income_cents' => 100_000,
             'savings_percent' => 20,
             'safety_buffer_cents' => 0,
         ]);
-        Account::factory()->create(['balance_cents' => 0]);
+        Account::factory()->for($user)->create(['balance_cents' => 0]);
 
-        Transaction::factory()->reviewed()->create([
+        Transaction::factory()->for($user)->reviewed()->create([
             'kind' => TransactionKind::Transfer,
             'bucket' => Bucket::Savings,
             'amount_cents' => 50_000,
             'transaction_date' => '2026-07-10',
         ]);
 
-        Transaction::factory()->reviewed()->create([
+        Transaction::factory()->for($user)->reviewed()->create([
             'kind' => TransactionKind::Expense,
             'bucket' => Bucket::Need,
             'amount_cents' => 12_34,
             'transaction_date' => '2026-07-11',
         ]);
 
-        $result = app(SafeToSpendService::class)->forPeriod(Carbon::parse('2026-07-15'));
+        $result = app(SafeToSpendService::class)->forUser($user, Carbon::parse('2026-07-15'));
 
         $this->assertSame(12_34, $result['bucket_actuals']['need']);
         $this->assertSame(0, $result['bucket_actuals']['savings']);
@@ -92,29 +95,64 @@ class SafeToSpendServiceTest extends TestCase
     #[TestDox('Subtracts refunds from the matching bucket’s spending actuals')]
     public function test_refunds_reduce_bucket_actuals(): void
     {
-        FinancialPlan::factory()->create([
+        $user = User::factory()->average()->create();
+
+        FinancialPlan::factory()->for($user)->create([
             'monthly_income_cents' => 100_000,
             'savings_percent' => 0,
             'safety_buffer_cents' => 0,
         ]);
-        Account::factory()->create(['balance_cents' => 0]);
+        Account::factory()->for($user)->create(['balance_cents' => 0]);
 
-        Transaction::factory()->reviewed()->create([
+        Transaction::factory()->for($user)->reviewed()->create([
             'kind' => TransactionKind::Expense,
             'bucket' => Bucket::Want,
             'amount_cents' => 10_000,
             'transaction_date' => '2026-07-05',
         ]);
 
-        Transaction::factory()->reviewed()->create([
+        Transaction::factory()->for($user)->reviewed()->create([
             'kind' => TransactionKind::Refund,
             'bucket' => Bucket::Want,
             'amount_cents' => 2_500,
             'transaction_date' => '2026-07-06',
         ]);
 
-        $result = app(SafeToSpendService::class)->forPeriod(Carbon::parse('2026-07-15'));
+        $result = app(SafeToSpendService::class)->forUser($user, Carbon::parse('2026-07-15'));
 
         $this->assertSame(7_500, $result['bucket_actuals']['want']);
+    }
+
+    #[TestDox('Safe-to-spend uses only the selected user’s accounts, plan, cash flows, and transactions')]
+    public function test_safe_to_spend_is_scoped_to_selected_user(): void
+    {
+        $selected = User::factory()->average()->create();
+        $other = User::factory()->reckless()->create();
+
+        FinancialPlan::factory()->for($selected)->create([
+            'monthly_income_cents' => 100_000,
+            'savings_percent' => 0,
+            'safety_buffer_cents' => 0,
+        ]);
+        FinancialPlan::factory()->for($other)->create([
+            'monthly_income_cents' => 999_000,
+            'savings_percent' => 0,
+            'safety_buffer_cents' => 0,
+        ]);
+
+        Account::factory()->for($selected)->create(['balance_cents' => 50_000]);
+        Account::factory()->for($other)->create(['balance_cents' => 5_000_000]);
+
+        PlannedCashFlow::factory()->for($other)->create([
+            'kind' => 'income',
+            'amount_cents' => 1_000_000,
+            'due_on' => '2026-07-28',
+        ]);
+
+        $result = app(SafeToSpendService::class)->forUser($selected, Carbon::parse('2026-07-15'));
+
+        $this->assertSame(50_000, $result['safe_to_spend_cents']);
+        $this->assertSame(50_000, $result['breakdown']['available_cash_cents']);
+        $this->assertSame(0, $result['breakdown']['remaining_expected_income_cents']);
     }
 }

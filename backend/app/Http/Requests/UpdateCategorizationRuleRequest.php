@@ -4,6 +4,7 @@ namespace App\Http\Requests;
 
 use App\Enums\Bucket;
 use App\Models\CategorizationRule;
+use App\Support\DemoUserContext;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -13,7 +14,13 @@ class UpdateCategorizationRuleRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return true;
+        $rule = $this->route('categorization_rule');
+
+        if (! $rule instanceof CategorizationRule) {
+            return false;
+        }
+
+        return (int) $rule->user_id === app(DemoUserContext::class)->id();
     }
 
     /**
@@ -21,10 +28,17 @@ class UpdateCategorizationRuleRequest extends FormRequest
      */
     public function rules(): array
     {
+        $userId = app(DemoUserContext::class)->id();
+
         return [
             'name' => ['sometimes', 'string', 'max:120'],
             'merchant_contains' => ['sometimes', 'string', 'max:120'],
-            'account_id' => ['sometimes', 'nullable', 'integer', 'exists:accounts,id'],
+            'account_id' => [
+                'sometimes',
+                'nullable',
+                'integer',
+                Rule::exists('accounts', 'id')->where(fn ($query) => $query->where('user_id', $userId)),
+            ],
             'amount_cents_min' => ['sometimes', 'nullable', 'integer', 'min:0'],
             'amount_cents_max' => ['sometimes', 'nullable', 'integer', 'min:0'],
             'target_bucket' => ['sometimes', Rule::enum(Bucket::class)],
