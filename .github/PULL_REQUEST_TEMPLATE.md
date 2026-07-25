@@ -1,6 +1,11 @@
 ## Summary
 <!-- What changed and why. Link the durable spec/task when applicable. -->
 
+## Decision rationale
+<!-- In your own words: why is this change worth making, why this approach, and
+what important alternative or tradeoff did you accept? Do not invent rationale
+for someone else; link the issue/spec when it already records the decision. -->
+
 ## Scope
 - [ ] In scope for this PR
 - [ ] Explicit non-goals (list below)
@@ -46,6 +51,7 @@
 **Security-review agent result:**
 
 ## Merge checklist
+- [ ] `docs/change-history.md` includes this PR's what, why, and decision context
 - [ ] Required CI / security checks are green
 - [ ] Conversation threads resolved
 - [ ] Human reviewer approves squash merge to `main`

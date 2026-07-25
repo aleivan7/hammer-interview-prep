@@ -57,14 +57,31 @@ Dependency Review CI is soft-gated until the dependency graph is enabled.
 Use the PR template. Every PR should include:
 
 1. Scope and non-goals
-2. Linked durable spec/task when applicable (`docs/specs/`)
-3. Financial-data impact notes when money math or categorization changes
-4. Test evidence (narrow automation/local commands and/or green CI
+2. Decision rationale in the author's own words, including meaningful tradeoffs
+3. A linked durable spec/task when applicable (`docs/specs/`)
+4. An entry in `docs/change-history.md` with the PR's what, why, decision
+   context, and supporting links
+5. Financial-data impact notes when money math or categorization changes
+6. Test evidence (narrow automation/local commands and/or green CI
    `./scripts/verify.sh`)
-5. Two AI review passes before human merge approval:
+7. Two AI review passes before human merge approval:
    - Cursor Bugbot on the PR
    - Independent security-review agent; paste the outcome into the PR
-6. Explicit human authorization to squash-merge
+8. Explicit human authorization to squash-merge
+
+### Merged change history
+
+`docs/change-history.md` is the repository's durable index of merged work.
+Update it in the same PR before merge:
+
+- Add one newest-first entry for every PR, including docs, tests, and chores.
+- Once the PR is open, use its actual number and URL.
+- Faithfully condense rationale from the author, issue, or linked spec. Do not
+  invent missing motives or present an agent inference as the author's view.
+- Record meaningful constraints, rejected alternatives, and non-goals when they
+  explain the implementation.
+- For product or architectural choices, also add a dated, PR-linked item to the
+  relevant spec's `Decisions` section.
 
 AI comments are advisory gates. They do not replace human judgment, and they
 do not count as GitHub “required approving reviews.”

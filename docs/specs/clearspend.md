@@ -88,6 +88,15 @@ server-authoritative financial math and complete data isolation between personas
   (explicitly not production authentication).
 - 2026-07-25: Hybrid local categorizer (rules + heuristics), AI-ready interface.
 - 2026-07-25: Trunk-based GitHub Flow; foundation already merged via PR #1.
+- 2026-07-25: Keep integer-cent financial math and server-authoritative totals
+  while excluding production auth, bank integrations, hosted AI, and deployment
+  from the interview POC (PR #9).
+- 2026-07-25: Use a near-black and emerald visual system without adding a UI
+  framework or changing established application behavior (PR #11).
+- 2026-07-25: Treat `X-Demo-User` as a public demo selector, not authentication,
+  while enforcing backend ownership scopes between synthetic personas (PR #14).
+- 2026-07-25: Make month-scoped multi-select the default Review experience and
+  move one-at-a-time processing into an accessible Focus dialog (PR #17).
 
 ## Open questions
 

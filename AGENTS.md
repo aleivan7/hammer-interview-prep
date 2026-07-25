@@ -44,6 +44,10 @@ From the repository root:
 
 - Trunk-based GitHub Flow: protect `main`, use short-lived PR branches, squash
   merge, delete branches. See `CONTRIBUTING.md`.
+- Every PR must update `docs/change-history.md` with a faithful account of what
+  changed, why, and the recorded human/product decision context. Do not invent
+  rationale. Link product or architectural decisions from the history entry to
+  the relevant spec's `Decisions` section.
 - Every PR needs green verification (`./scripts/verify.sh` locally and/or CI),
   Cursor Bugbot, an independent security-review agent pass, and explicit human
   merge approval.

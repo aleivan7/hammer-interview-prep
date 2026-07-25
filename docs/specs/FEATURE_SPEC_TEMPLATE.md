@@ -29,7 +29,7 @@ Last updated: YYYY-MM-DD
 
 ## Decisions
 
-- YYYY-MM-DD: [Decision and short reason.]
+- YYYY-MM-DD: [Decision, short reason, and PR/issue link.]
 
 ## Open questions
 

@@ -150,6 +150,7 @@ this POC does **not** call a hosted LLM.
 
 - Feature spec: [`docs/specs/clearspend.md`](docs/specs/clearspend.md)
 - Implementation plan: [`docs/specs/clearspend-plan.md`](docs/specs/clearspend-plan.md)
+- Merged PR rationale: [`docs/change-history.md`](docs/change-history.md)
 - AI delivery workflow: [`docs/ai-workflow.md`](docs/ai-workflow.md)
 
 Interactive development: commits, pushes, merges, and deploys require an
