@@ -70,13 +70,15 @@ jobs:
         continue-on-error: true
         run: npm audit --omit=dev --audit-level=high
 
+      - name: Prepare backend environment for CI
+        working-directory: backend
+        run: |
+          cp .env.example .env
+          php artisan key:generate --force --no-interaction
+          touch database/database.sqlite
+
       - name: Validate migrations and seeders
         working-directory: backend
-        env:
-          APP_ENV: testing
-          APP_KEY: base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
-          DB_CONNECTION: sqlite
-          DB_DATABASE: ':memory:'
         run: php artisan migrate:fresh --seed --force --no-interaction
 
       - name: Run project verification
