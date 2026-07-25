@@ -1,10 +1,13 @@
 /**
- * Demo user composable request racing
+ * Demo user composable: profile load, stale-session clear, reset revision, and request racing
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fetchProfile } from '../api/profileApi'
+import { ApiError } from '../api/http'
+import { fetchProfile, resetDemoProfile } from '../api/profileApi'
 import {
+  DEMO_USER_STORAGE_KEY,
   __resetDemoUserSessionForTests,
+  getSelectedDemoUserId,
   setDemoProfile,
   setSelectedDemoUserId,
 } from '../session/demoUserSession'
@@ -37,12 +40,91 @@ function makeProfile(id: number, name: string): DemoProfile {
   }
 }
 
+const profile = makeProfile(2, 'Jordan Lee')
+
+beforeEach(() => {
+  localStorage.clear()
+  __resetDemoUserSessionForTests()
+  __resetUseDemoUserForTests()
+  vi.mocked(fetchProfile).mockReset()
+  vi.mocked(resetDemoProfile).mockReset()
+})
+
 describe('useDemoUser', () => {
-  beforeEach(() => {
-    localStorage.clear()
-    __resetDemoUserSessionForTests()
-    __resetUseDemoUserForTests()
-    vi.mocked(fetchProfile).mockReset()
+  it('returns null from ensureProfile when no demo user is selected', async () => {
+    const { ensureProfile, profile: profileRef } = useDemoUser()
+
+    await expect(ensureProfile()).resolves.toBeNull()
+    expect(profileRef.value).toBeNull()
+    expect(fetchProfile).not.toHaveBeenCalled()
+  })
+
+  it('loads and caches the selected demo profile', async () => {
+    setSelectedDemoUserId(2)
+    vi.mocked(fetchProfile).mockResolvedValue(profile)
+    const { ensureProfile, profile: profileRef } = useDemoUser()
+
+    await expect(ensureProfile()).resolves.toEqual(profile)
+    await expect(ensureProfile()).resolves.toEqual(profile)
+
+    expect(fetchProfile).toHaveBeenCalledTimes(1)
+    expect(profileRef.value?.name).toBe('Jordan Lee')
+  })
+
+  it('returns the cached profile when already validated for the selected user', async () => {
+    const cached = makeProfile(3, 'Sam Chen')
+    setSelectedDemoUserId(3)
+    setDemoProfile(cached)
+
+    const { ensureProfile } = useDemoUser()
+    // Seed validatedForId by forcing one successful fetch first.
+    vi.mocked(fetchProfile).mockResolvedValueOnce(cached)
+    await ensureProfile({ force: true })
+
+    vi.mocked(fetchProfile).mockClear()
+    await expect(ensureProfile()).resolves.toEqual(cached)
+    expect(fetchProfile).not.toHaveBeenCalled()
+  })
+
+  it('clears a stale selected id when profile load reports demo_user_invalid', async () => {
+    setSelectedDemoUserId(99)
+    vi.mocked(fetchProfile).mockRejectedValue(
+      new ApiError('The selected demo user is invalid.', 401, 'demo_user_invalid'),
+    )
+    const { ensureProfile, error } = useDemoUser()
+
+    await expect(ensureProfile()).resolves.toBeNull()
+    expect(getSelectedDemoUserId()).toBeNull()
+    expect(localStorage.getItem(DEMO_USER_STORAGE_KEY)).toBeNull()
+    expect(error.value).toContain('no longer available')
+  })
+
+  it('bumps the session revision after a successful demo data reset', async () => {
+    setSelectedDemoUserId(2)
+    vi.mocked(resetDemoProfile).mockResolvedValue({
+      data: profile,
+      message: 'Demo profile data restored to its original seeded state.',
+    })
+    const { resetCurrentDemoData, sessionRevision, profile: profileRef } = useDemoUser()
+    const before = sessionRevision.value
+
+    await expect(resetCurrentDemoData()).resolves.toEqual(profile)
+
+    expect(sessionRevision.value).toBe(before + 1)
+    expect(profileRef.value).toEqual(profile)
+  })
+
+  it('selectDemoUser stores the id and clears a previously cached profile', async () => {
+    setSelectedDemoUserId(2)
+    vi.mocked(fetchProfile).mockResolvedValue(profile)
+    const { ensureProfile, selectDemoUser, profile: profileRef } = useDemoUser()
+    await ensureProfile()
+
+    selectDemoUser(1)
+
+    expect(getSelectedDemoUserId()).toBe(1)
+    expect(localStorage.getItem(DEMO_USER_STORAGE_KEY)).toBe('1')
+    expect(profileRef.value).toBeNull()
   })
 
   it('ignores a stale profile response after switching personas', async () => {
@@ -59,7 +141,7 @@ describe('useDemoUser', () => {
       )
       .mockResolvedValueOnce(second)
 
-    const { ensureProfile, selectDemoUser, profile } = useDemoUser()
+    const { ensureProfile, selectDemoUser, profile: profileRef } = useDemoUser()
 
     selectDemoUser(1)
     const firstRequest = ensureProfile({ force: true })
@@ -68,25 +150,10 @@ describe('useDemoUser', () => {
     const secondRequest = ensureProfile({ force: true })
 
     await expect(secondRequest).resolves.toEqual(second)
-    expect(profile.value).toEqual(second)
+    expect(profileRef.value).toEqual(second)
 
     resolveFirst?.(first)
     await expect(firstRequest).resolves.toBeNull()
-    expect(profile.value).toEqual(second)
-  })
-
-  it('returns the cached profile when already validated for the selected user', async () => {
-    const cached = makeProfile(3, 'Sam Chen')
-    setSelectedDemoUserId(3)
-    setDemoProfile(cached)
-
-    const { ensureProfile } = useDemoUser()
-    // Seed validatedForId by forcing one successful fetch first.
-    vi.mocked(fetchProfile).mockResolvedValueOnce(cached)
-    await ensureProfile({ force: true })
-
-    vi.mocked(fetchProfile).mockClear()
-    await expect(ensureProfile()).resolves.toEqual(cached)
-    expect(fetchProfile).not.toHaveBeenCalled()
+    expect(profileRef.value).toEqual(second)
   })
 })

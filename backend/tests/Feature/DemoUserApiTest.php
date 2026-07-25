@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\User;
 use App\Services\DemoPersonaDataService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
@@ -69,6 +70,37 @@ class DemoUserApiTest extends TestCase
             ->assertJsonPath('code', 'demo_user_invalid');
 
         $this->withHeader('X-Demo-User', 'abc')
+            ->getJson('/api/profile')
+            ->assertUnauthorized()
+            ->assertJsonPath('code', 'demo_user_invalid');
+    }
+
+    #[TestDox('Protected endpoints reject blank or zero demo-user headers')]
+    public function test_protected_endpoints_reject_blank_or_zero_demo_user_header(): void
+    {
+        $this->withHeader('X-Demo-User', '   ')
+            ->getJson('/api/dashboard')
+            ->assertUnauthorized()
+            ->assertJsonPath('code', 'demo_user_required');
+
+        $this->withHeader('X-Demo-User', '0')
+            ->getJson('/api/accounts')
+            ->assertUnauthorized()
+            ->assertJsonPath('code', 'demo_user_invalid');
+    }
+
+    #[TestDox('Protected endpoints reject users that are not demo personas')]
+    public function test_protected_endpoints_reject_non_persona_users(): void
+    {
+        $nonPersona = User::factory()->create([
+            'persona_type' => null,
+            'persona_label' => null,
+            'description' => null,
+            'member_since' => null,
+            'avatar_initials' => null,
+        ]);
+
+        $this->withHeader('X-Demo-User', (string) $nonPersona->id)
             ->getJson('/api/profile')
             ->assertUnauthorized()
             ->assertJsonPath('code', 'demo_user_invalid');
