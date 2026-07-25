@@ -14,6 +14,16 @@ const loading = shallowRef(false)
 const error = shallowRef<string | null>(null)
 let profileRequest: Promise<DemoProfile | null> | null = null
 let validatedForId: number | null = null
+let activeProfileRequestId = 0
+
+/** Test helper — resets module-level request tracking. */
+export function __resetUseDemoUserForTests(): void {
+  loading.value = false
+  error.value = null
+  profileRequest = null
+  validatedForId = null
+  activeProfileRequestId = 0
+}
 
 export function useDemoUser() {
   const session = useDemoUserSessionState()
@@ -37,13 +47,22 @@ export function useDemoUser() {
     loading.value = true
     error.value = null
     validatedForId = id
+    const requestId = ++activeProfileRequestId
 
     profileRequest = (async () => {
       try {
         const next = await fetchProfile()
+        if (session.selectedUserId.value !== id || requestId !== activeProfileRequestId) {
+          return null
+        }
+
         setDemoProfile(next)
         return next
       } catch (err) {
+        if (session.selectedUserId.value !== id || requestId !== activeProfileRequestId) {
+          return null
+        }
+
         setDemoProfile(null)
         if (err instanceof ApiError && (err.code === 'demo_user_invalid' || err.code === 'demo_user_required')) {
           clearSelectedDemoUser()
@@ -55,8 +74,10 @@ export function useDemoUser() {
         error.value = err instanceof Error ? err.message : 'Failed to load demo profile.'
         throw err
       } finally {
-        loading.value = false
-        profileRequest = null
+        if (requestId === activeProfileRequestId) {
+          loading.value = false
+          profileRequest = null
+        }
       }
     })()
 
@@ -67,12 +88,16 @@ export function useDemoUser() {
     setSelectedDemoUserId(id)
     setDemoProfile(null)
     validatedForId = null
+    activeProfileRequestId += 1
+    profileRequest = null
     error.value = null
   }
 
   function switchDemoUser(): void {
     clearSelectedDemoUser()
     validatedForId = null
+    activeProfileRequestId += 1
+    profileRequest = null
     error.value = null
   }
 

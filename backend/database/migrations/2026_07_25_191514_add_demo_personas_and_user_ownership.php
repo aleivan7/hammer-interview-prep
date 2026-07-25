@@ -53,18 +53,23 @@ return new class extends Migration
             || DB::table('transactions')->exists()
             || DB::table('categorization_rules')->exists()
         ) {
-            $legacyUserId = DB::table('users')->insertGetId([
-                'name' => 'Jordan Lee',
-                'email' => 'jordan.lee@clearspend.demo',
-                'password' => null,
-                'persona_type' => 'average',
-                'persona_label' => 'Average Spender',
-                'description' => 'Legacy single-tenant ClearSpend dataset migrated under Jordan Lee.',
-                'member_since' => '2026-01-01',
-                'avatar_initials' => 'JL',
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
+            $legacyEmail = 'jordan.lee@clearspend.demo';
+            $legacyUserId = DB::table('users')->where('email', $legacyEmail)->value('id');
+
+            if ($legacyUserId === null) {
+                $legacyUserId = DB::table('users')->insertGetId([
+                    'name' => 'Jordan Lee',
+                    'email' => $legacyEmail,
+                    'password' => null,
+                    'persona_type' => 'average',
+                    'persona_label' => 'Average Spender',
+                    'description' => 'Legacy single-tenant ClearSpend dataset migrated under Jordan Lee.',
+                    'member_since' => '2026-01-01',
+                    'avatar_initials' => 'JL',
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+            }
 
             foreach (['financial_plans', 'accounts', 'planned_cash_flows', 'transactions', 'categorization_rules'] as $table) {
                 DB::table($table)->whereNull('user_id')->update(['user_id' => $legacyUserId]);
@@ -129,6 +134,10 @@ return new class extends Migration
             $table->dropUnique(['user_id']);
             $table->dropConstrainedForeignId('user_id');
         });
+
+        // Demo personas (and the legacy Jordan backfill) use null passwords.
+        // Remove them before restoring the non-null password column.
+        DB::table('users')->whereNull('password')->delete();
 
         Schema::table('users', function (Blueprint $table) {
             $table->dropIndex(['persona_type']);
