@@ -187,9 +187,21 @@ async function loadSuggestion(transaction: Transaction | null): Promise<void> {
   }
 }
 
+function pruneFocusQueue(removedIds: Iterable<number>): void {
+  const removed = new Set(removedIds)
+  if (!removed.size || !focusQueueIds.value.length) {
+    return
+  }
+
+  focusQueueIds.value = focusQueueIds.value.filter((id) => !removed.has(id))
+  if (focusOpen.value && focusQueueIds.value.length === 0 && focusCompleted.value === 0) {
+    closeFocus()
+  }
+}
+
 function openFocus(startId?: number): void {
   const monthTransactions = activeMonthTransactions.value
-  if (!monthTransactions.length) {
+  if (!monthTransactions.length || updating.value) {
     return
   }
 
@@ -295,6 +307,7 @@ async function categorizeSelected(bucket: Bucket): Promise<void> {
   if (fulfilled.length) {
     const done = new Set(fulfilled)
     transactions.value = transactions.value.filter((transaction) => !done.has(transaction.id))
+    pruneFocusQueue(done)
     selectedIds.value = failed
     bulkUndoIds.value = fulfilled
     bulkStatus.value = `Categorized ${fulfilled.length}${failed.length ? `, ${failed.length} failed` : ''}.`
@@ -346,6 +359,7 @@ async function categorizeOne(id: number, bucket: Bucket): Promise<void> {
   try {
     await updateTransaction(id, { bucket, reviewed: true })
     transactions.value = transactions.value.filter((transaction) => transaction.id !== id)
+    pruneFocusQueue([id])
     selectedIds.value = selectedIds.value.filter((selectedId) => selectedId !== id)
   } catch (error) {
     updateError.value =
