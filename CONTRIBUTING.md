@@ -23,6 +23,18 @@ This repository uses **GitHub Flow** (trunk-based):
 Run the narrowest relevant test while iterating, then the full gate before asking
 for review.
 
+## Repository security settings
+
+After the foundation lands on `main`, enable these under
+**Settings → Code security and analysis**:
+
+- Dependency graph
+- Dependabot alerts / security updates (optional but recommended)
+- Secret scanning / push protection when available
+- Cursor Bugbot with **fail on unresolved issues**
+
+Dependency Review CI is soft-gated until the dependency graph is enabled.
+
 ## Pull request expectations
 
 Use the PR template. Every PR should include:
