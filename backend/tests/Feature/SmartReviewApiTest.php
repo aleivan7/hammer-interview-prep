@@ -6,12 +6,17 @@ use App\Enums\Bucket;
 use App\Models\CategorizationRule;
 use App\Models\Transaction;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use PHPUnit\Framework\Attributes\TestDox;
 use Tests\TestCase;
 
+/**
+ * Smart Review API: confident auto-apply, idempotent batches, and rule precedence.
+ */
 class SmartReviewApiTest extends TestCase
 {
     use RefreshDatabase;
 
+    #[TestDox('Auto-reviews confident rule matches and leaves uncertain merchants unreviewed')]
     public function test_smart_review_applies_confident_matches_and_skips_uncertain(): void
     {
         CategorizationRule::factory()->create([
@@ -56,6 +61,7 @@ class SmartReviewApiTest extends TestCase
         ]);
     }
 
+    #[TestDox('Retrying Smart Review with the same batch key does not double-apply reviews')]
     public function test_smart_review_retry_with_same_batch_key_is_idempotent(): void
     {
         CategorizationRule::factory()->create([
@@ -89,6 +95,7 @@ class SmartReviewApiTest extends TestCase
         ]);
     }
 
+    #[TestDox('Rejects batch keys that contain SQL LIKE wildcards')]
     public function test_smart_review_rejects_like_wildcards_in_batch_key(): void
     {
         foreach (['batch%', 'batch_key'] as $batchKey) {
@@ -98,6 +105,7 @@ class SmartReviewApiTest extends TestCase
         }
     }
 
+    #[TestDox('Suggestion endpoint prefers the lower-priority (more specific) matching rule')]
     public function test_rule_precedence_lower_priority_wins(): void
     {
         CategorizationRule::factory()->create([

@@ -5,10 +5,13 @@ namespace Tests\Feature;
 // use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
+/**
+ * Scaffold smoke test: Laravel HTTP kernel responds successfully.
+ */
 class ExampleTest extends TestCase
 {
     /**
-     * A basic test example.
+     * Confirms GET / returns HTTP 200 from the default application route.
      */
     public function test_the_application_returns_a_successful_response(): void
     {

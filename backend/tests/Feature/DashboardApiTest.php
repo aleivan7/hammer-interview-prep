@@ -9,12 +9,17 @@ use App\Models\FinancialPlan;
 use App\Models\PlannedCashFlow;
 use App\Models\Transaction;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use PHPUnit\Framework\Attributes\TestDox;
 use Tests\TestCase;
 
+/**
+ * Dashboard API: safe-to-spend, plan, accounts, cash flows, and recent activity.
+ */
 class DashboardApiTest extends TestCase
 {
     use RefreshDatabase;
 
+    #[TestDox('Returns the safe-to-spend envelope with plan, accounts, and recent transactions')]
     public function test_dashboard_returns_safe_to_spend_envelope(): void
     {
         FinancialPlan::factory()->create([
