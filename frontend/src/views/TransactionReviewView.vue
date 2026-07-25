@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, shallowRef, watch } from 'vue'
+import { computed, onMounted, shallowRef, watch } from 'vue'
 import { runSmartReview } from '../api/smartReviewApi'
 import {
   fetchReviewQueue,
@@ -374,50 +374,12 @@ async function handleSmartReview(): Promise<void> {
   }
 }
 
-function onKeydown(event: KeyboardEvent): void {
-  if (!focusOpen.value) {
-    return
-  }
-
-  if (event.key === 'Escape' && !updating.value) {
-    event.preventDefault()
-    closeFocus()
-    return
-  }
-
-  const target = event.target as HTMLElement | null
-  if (target && ['A', 'INPUT', 'SELECT', 'TEXTAREA'].includes(target.tagName)) {
-    return
-  }
-
-  if (event.key.toLowerCase() === 'u') {
-    event.preventDefault()
-    void undo()
-  } else if (!updating.value && currentFocusTransaction.value) {
-    if (event.key === 'ArrowLeft') {
-      event.preventDefault()
-      void categorize('want')
-    } else if (event.key === 'ArrowRight') {
-      event.preventDefault()
-      void categorize('need')
-    } else if (event.key === 'ArrowDown') {
-      event.preventDefault()
-      void categorize('savings')
-    }
-  }
-}
-
 watch(currentFocusTransaction, (transaction) => {
   void loadSuggestion(transaction)
 })
 
 onMounted(() => {
   void loadTransactions(null)
-  window.addEventListener('keydown', onKeydown)
-})
-
-onUnmounted(() => {
-  window.removeEventListener('keydown', onKeydown)
 })
 </script>
 

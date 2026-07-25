@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, useTemplateRef } from 'vue'
+import { computed, onMounted, onUnmounted, shallowRef, useTemplateRef, watch } from 'vue'
 import type { Bucket } from '../../types/bucket'
 import type { Transaction, TransactionSuggestion } from '../../types/transaction'
 import AppIcon from '../ui/AppIcon.vue'
@@ -23,21 +23,110 @@ const emit = defineEmits<{
   skip: []
 }>()
 
+type ReviewCardExpose = {
+  beginExit: (bucket: Bucket) => Promise<void>
+  reset: () => void
+}
+
 const closeButton = useTemplateRef<HTMLButtonElement>('closeButton')
+const cardRef = useTemplateRef<ReviewCardExpose>('cardRef')
 const previousBodyOverflow = document.body.style.overflow
+const exiting = shallowRef(false)
+
+const busy = computed(() => props.updating || exiting.value)
+
+async function requestCategorize(bucket: Bucket): Promise<void> {
+  if (!props.transaction || busy.value) {
+    return
+  }
+
+  exiting.value = true
+  try {
+    if (cardRef.value) {
+      await cardRef.value.beginExit(bucket)
+    } else {
+      emit('categorize', bucket)
+    }
+  } finally {
+    exiting.value = false
+  }
+}
+
+function onCardCategorize(bucket: Bucket): void {
+  emit('categorize', bucket)
+}
+
+function onKeydown(event: KeyboardEvent): void {
+  if (event.key === 'Escape' && !props.updating) {
+    event.preventDefault()
+    emit('close')
+    return
+  }
+
+  const target = event.target as HTMLElement | null
+  if (target && ['A', 'INPUT', 'SELECT', 'TEXTAREA'].includes(target.tagName)) {
+    return
+  }
+
+  if (event.key.toLowerCase() === 'u') {
+    event.preventDefault()
+    if (!busy.value) {
+      emit('undo')
+    }
+    return
+  }
+
+  if (busy.value || !props.transaction) {
+    return
+  }
+
+  if (event.key === 'ArrowLeft') {
+    event.preventDefault()
+    void requestCategorize('want')
+  } else if (event.key === 'ArrowRight') {
+    event.preventDefault()
+    void requestCategorize('need')
+  } else if (event.key === 'ArrowDown') {
+    event.preventDefault()
+    void requestCategorize('savings')
+  }
+}
+
+watch(
+  () => props.error,
+  (error) => {
+    if (error) {
+      cardRef.value?.reset()
+      exiting.value = false
+    }
+  },
+)
+
+watch(
+  () => props.transaction?.id,
+  () => {
+    exiting.value = false
+  },
+)
+
+function onExitStart(): void {
+  exiting.value = true
+}
 
 onMounted(() => {
   document.body.style.overflow = 'hidden'
   closeButton.value?.focus()
+  window.addEventListener('keydown', onKeydown)
 })
 
 onUnmounted(() => {
   document.body.style.overflow = previousBodyOverflow
+  window.removeEventListener('keydown', onKeydown)
 })
 </script>
 
 <template>
-  <div class="overlay" role="presentation" @click.self="!props.updating && emit('close')">
+  <div class="overlay" role="presentation" @click.self="!busy && emit('close')">
     <section
       class="dialog"
       role="dialog"
@@ -58,7 +147,7 @@ onUnmounted(() => {
           type="button"
           class="btn btn-icon"
           aria-label="Close focus mode"
-          :disabled="updating"
+          :disabled="busy"
           @click="emit('close')"
         >
           <AppIcon name="close" :size="18" />
@@ -70,19 +159,24 @@ onUnmounted(() => {
           <div class="back-card one" />
           <div class="back-card two" />
         </div>
-        <ReviewCard
-          :transaction="transaction"
-          :suggestion="suggestion"
-          :updating="updating"
-          @categorize="emit('categorize', $event)"
-        />
+        <Transition name="focus-card" mode="out-in">
+          <ReviewCard
+            :key="transaction.id"
+            ref="cardRef"
+            :transaction="transaction"
+            :suggestion="suggestion"
+            :updating="updating"
+            @categorize="onCardCategorize"
+            @exit-start="onExitStart"
+          />
+        </Transition>
       </div>
 
       <ReviewActions
         v-if="transaction"
-        :updating="updating"
-        :can-undo="canUndo"
-        @categorize="emit('categorize', $event)"
+        :updating="busy"
+        :can-undo="canUndo && !exiting"
+        @categorize="requestCategorize"
         @undo="emit('undo')"
         @skip="emit('skip')"
       />
@@ -95,20 +189,23 @@ onUnmounted(() => {
           <button
             type="button"
             class="btn btn-ghost"
-            :disabled="updating || !canUndo"
+            :disabled="busy || !canUndo"
             @click="emit('undo')"
           >
             <AppIcon name="undo" :size="16" />
             Undo
           </button>
-          <button type="button" class="btn btn-primary" :disabled="updating" @click="emit('close')">
+          <button type="button" class="btn btn-primary" :disabled="busy" @click="emit('close')">
             Return to month
           </button>
         </div>
       </div>
 
-      <p v-if="error" class="inline-error" role="alert">{{ error }}</p>
-      <p v-if="updating" class="status" role="status">Saving category…</p>
+      <div class="feedback" aria-live="polite">
+        <p v-if="error" class="inline-error" role="alert">{{ error }}</p>
+        <p v-else-if="updating" class="status" role="status">Saving category…</p>
+        <p v-else class="status placeholder">&nbsp;</p>
+      </div>
     </section>
   </div>
 </template>
@@ -122,8 +219,7 @@ onUnmounted(() => {
   place-items: center;
   padding: var(--space-4);
   overflow-y: auto;
-  background: rgba(0, 0, 0, 0.72);
-  backdrop-filter: blur(8px);
+  background: rgba(0, 0, 0, 0.78);
 }
 
 .dialog {
@@ -172,6 +268,7 @@ onUnmounted(() => {
 
 .stack {
   position: relative;
+  min-height: 22rem;
 }
 
 .deck {
@@ -199,19 +296,29 @@ onUnmounted(() => {
   transform: translateY(18px) scale(0.96);
 }
 
+.feedback {
+  min-height: 1.25rem;
+}
+
 .inline-error {
   color: var(--danger);
+}
+
+.status.placeholder {
+  visibility: hidden;
 }
 
 .complete {
   display: grid;
   justify-items: center;
   gap: var(--space-3);
+  min-height: 22rem;
   padding: var(--space-6) var(--space-4);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--bg-elevated);
   text-align: center;
+  align-content: center;
 }
 
 .complete h3,
@@ -233,6 +340,28 @@ onUnmounted(() => {
   flex-wrap: wrap;
   justify-content: center;
   gap: var(--space-3);
+}
+
+.focus-card-enter-active {
+  transition:
+    transform 140ms ease,
+    opacity 140ms ease;
+}
+
+.focus-card-leave-active {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  transition: opacity 60ms ease;
+}
+
+.focus-card-enter-from {
+  transform: translateY(12px) scale(0.985);
+  opacity: 0;
+}
+
+.focus-card-leave-to {
+  opacity: 0;
 }
 
 @media (max-height: 760px) {

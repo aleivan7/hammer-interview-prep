@@ -20,6 +20,7 @@ import {
   updateTransaction,
 } from '../api/transactionApi'
 import { runSmartReview } from '../api/smartReviewApi'
+import { CARD_EXIT_MS } from '../composables/useCardSwipe'
 import type { Transaction } from '../types/transaction'
 import TransactionReviewView from './TransactionReviewView.vue'
 
@@ -113,7 +114,14 @@ function buttonContaining(wrapper: ButtonContainer, name: string) {
   return button
 }
 
+async function completeFocusExit(): Promise<void> {
+  // Cover the optional pre-exit frame plus the fly-off duration.
+  await vi.advanceTimersByTimeAsync(CARD_EXIT_MS + 48)
+  await flushPromises()
+}
+
 beforeEach(() => {
+  vi.useFakeTimers()
   vi.mocked(fetchReviewQueue).mockReset()
   vi.mocked(fetchTransactionSuggestion).mockReset()
   vi.mocked(updateTransaction).mockReset()
@@ -127,6 +135,10 @@ beforeEach(() => {
     explanation: 'Heuristic match for merchant containing "heb".',
     auto_review: true,
   })
+})
+
+afterEach(() => {
+  vi.useRealTimers()
 })
 
 describe('TransactionReviewView', () => {
@@ -207,7 +219,8 @@ describe('TransactionReviewView', () => {
     expect(dialog.text()).toContain('Suggestion')
 
     await buttonContaining(dialog, 'Wants').trigger('click')
-    await flushPromises()
+    expect(buttonContaining(dialog, 'Needs').attributes('disabled')).toBeDefined()
+    await completeFocusExit()
 
     expect(updateTransaction).toHaveBeenCalledWith(2, {
       bucket: 'want',
@@ -230,6 +243,8 @@ describe('TransactionReviewView', () => {
     await buttonContaining(wrapper, 'Start Focus mode').trigger('click')
     const dialog = wrapper.get('[role="dialog"]')
     await buttonContaining(dialog, 'Wants').trigger('click')
+    expect(buttonContaining(dialog, 'Needs').attributes('disabled')).toBeDefined()
+    await completeFocusExit()
 
     expect(buttonContaining(dialog, 'Needs').attributes('disabled')).toBeDefined()
     expect(buttonContaining(dialog, 'Wants').attributes('disabled')).toBeDefined()
@@ -260,7 +275,7 @@ describe('TransactionReviewView', () => {
     await buttonContaining(wrapper, 'Start Focus mode').trigger('click')
     const dialog = wrapper.get('[role="dialog"]')
     await buttonContaining(dialog, 'Needs').trigger('click')
-    await flushPromises()
+    await completeFocusExit()
 
     expect(dialog.get('[role="alert"]').text()).toBe('Could not save category')
     expect(dialog.text()).toContain('HEB')
@@ -304,7 +319,7 @@ describe('TransactionReviewView', () => {
     expect(dialog.text()).toContain('HEB')
 
     await buttonContaining(dialog, 'Needs').trigger('click')
-    await flushPromises()
+    await completeFocusExit()
 
     dialog = wrapper.get('[role="dialog"]')
     await buttonContaining(dialog, 'Undo').trigger('click')
@@ -345,7 +360,7 @@ describe('TransactionReviewView', () => {
 
     await buttonContaining(wrapper, 'Start Focus mode').trigger('click')
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }))
-    await flushPromises()
+    await completeFocusExit()
 
     expect(updateTransaction).toHaveBeenCalledWith(2, {
       bucket: 'need',
