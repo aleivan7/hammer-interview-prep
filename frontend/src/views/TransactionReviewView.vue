@@ -7,8 +7,7 @@ import {
   undoTransactionReview,
   updateTransaction,
 } from '../api/transactionApi'
-import ReviewActions from '../components/review/ReviewActions.vue'
-import ReviewCard from '../components/review/ReviewCard.vue'
+import ReviewFocusDialog from '../components/review/ReviewFocusDialog.vue'
 import ReviewQueueList from '../components/review/ReviewQueueList.vue'
 import AppIcon from '../components/ui/AppIcon.vue'
 import EmptyState from '../components/ui/EmptyState.vue'
@@ -18,66 +17,151 @@ import type { Bucket } from '../types/bucket'
 import type { SmartReviewResult } from '../types/smartReview'
 import type { Transaction, TransactionSuggestion } from '../types/transaction'
 
-type Mode = 'swipe' | 'multi'
-
 const transactions = shallowRef<Transaction[]>([])
-const currentIndex = shallowRef(0)
+const activeMonthKey = shallowRef<string | null>(null)
 const loading = shallowRef(true)
 const updating = shallowRef(false)
 const smartRunning = shallowRef(false)
 const loadError = shallowRef<string | null>(null)
 const updateError = shallowRef<string | null>(null)
 const suggestion = shallowRef<TransactionSuggestion | null>(null)
-const undoStack = shallowRef<number[]>([])
 const smartResult = shallowRef<SmartReviewResult | null>(null)
-const mode = shallowRef<Mode>('swipe')
 const tipsOpen = shallowRef(false)
 const selectedIds = shallowRef<number[]>([])
 const bulkUndoIds = shallowRef<number[]>([])
 const bulkStatus = shallowRef<string | null>(null)
-const wideLayout = shallowRef(true)
+const focusOpen = shallowRef(false)
+const focusQueueIds = shallowRef<number[]>([])
+const focusUndoStack = shallowRef<number[]>([])
+const focusCompleted = shallowRef(0)
+const focusTotal = shallowRef(0)
 
-const currentTransaction = computed(
-  () => transactions.value[currentIndex.value] ?? null,
-)
-const isComplete = computed(
-  () => !loading.value && !loadError.value && currentTransaction.value === null,
-)
-const progressLabel = computed(() => {
-  if (!currentTransaction.value) {
+function transactionMonth(transaction: Transaction): string {
+  return transaction.transaction_date.slice(0, 7)
+}
+
+function compareNewestFirst(a: Transaction, b: Transaction): number {
+  return (
+    b.transaction_date.localeCompare(a.transaction_date) ||
+    b.id - a.id
+  )
+}
+
+function formatMonth(key: string | null): string {
+  if (!key) {
     return ''
   }
 
-  return `Transaction ${currentIndex.value + 1} of ${transactions.value.length}`
-})
-
-const remainingQueue = computed(() =>
-  transactions.value.slice(currentIndex.value).filter((tx) => !tx.reviewed),
-)
-
-function syncWideLayout(): void {
-  if (typeof window.matchMedia !== 'function') {
-    wideLayout.value = true
-    return
-  }
-  wideLayout.value = window.matchMedia('(min-width: 1100px)').matches
+  const [year, month] = key.split('-').map(Number)
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'UTC',
+  }).format(new Date(Date.UTC(year, month - 1, 1)))
 }
 
-async function loadTransactions(): Promise<void> {
+const availableMonthKeys = computed(() =>
+  [...new Set(transactions.value.map(transactionMonth))].sort().reverse(),
+)
+
+const navigableMonthKeys = computed(() => {
+  const keys = new Set(availableMonthKeys.value)
+  if (activeMonthKey.value) {
+    keys.add(activeMonthKey.value)
+  }
+  return [...keys].sort().reverse()
+})
+
+const activeMonthTransactions = computed(() =>
+  transactions.value
+    .filter((transaction) => transactionMonth(transaction) === activeMonthKey.value)
+    .sort(compareNewestFirst),
+)
+
+const activeMonthLabel = computed(() => formatMonth(activeMonthKey.value))
+const activeMonthIndex = computed(() =>
+  activeMonthKey.value ? navigableMonthKeys.value.indexOf(activeMonthKey.value) : -1,
+)
+const canGoNewer = computed(() => activeMonthIndex.value > 0)
+const canGoOlder = computed(
+  () =>
+    activeMonthIndex.value >= 0 &&
+    activeMonthIndex.value < navigableMonthKeys.value.length - 1,
+)
+const isComplete = computed(
+  () => !loading.value && !loadError.value && transactions.value.length === 0,
+)
+
+const currentFocusTransaction = computed(() => {
+  const currentId = focusQueueIds.value[0]
+  return transactions.value.find((transaction) => transaction.id === currentId) ?? null
+})
+
+const focusProgressLabel = computed(() => {
+  if (!focusTotal.value) {
+    return ''
+  }
+
+  if (!currentFocusTransaction.value) {
+    return `${focusTotal.value} of ${focusTotal.value} reviewed`
+  }
+
+  return `Transaction ${Math.min(focusCompleted.value + 1, focusTotal.value)} of ${focusTotal.value}`
+})
+
+function closeFocus(): void {
+  focusOpen.value = false
+  focusQueueIds.value = []
+  focusUndoStack.value = []
+  focusCompleted.value = 0
+  focusTotal.value = 0
+  suggestion.value = null
+  updateError.value = null
+}
+
+function chooseMonth(key: string): void {
+  if (key === activeMonthKey.value) {
+    return
+  }
+
+  closeFocus()
+  activeMonthKey.value = key
+  selectedIds.value = []
+  bulkStatus.value = null
+  bulkUndoIds.value = []
+}
+
+function goOlder(): void {
+  const key = navigableMonthKeys.value[activeMonthIndex.value + 1]
+  if (key) {
+    chooseMonth(key)
+  }
+}
+
+function goNewer(): void {
+  const key = navigableMonthKeys.value[activeMonthIndex.value - 1]
+  if (key) {
+    chooseMonth(key)
+  }
+}
+
+async function loadTransactions(preferredMonth: string | null = activeMonthKey.value): Promise<void> {
   loading.value = true
   loadError.value = null
   updateError.value = null
-  currentIndex.value = 0
-  undoStack.value = []
-  suggestion.value = null
+  closeFocus()
   selectedIds.value = []
   bulkUndoIds.value = []
   bulkStatus.value = null
 
   try {
-    transactions.value = await fetchReviewQueue()
+    const loaded = await fetchReviewQueue()
+    transactions.value = loaded
+    const monthKeys = [...new Set(loaded.map(transactionMonth))].sort().reverse()
+    activeMonthKey.value = preferredMonth ?? monthKeys[0] ?? null
   } catch (error) {
     transactions.value = []
+    activeMonthKey.value = null
     loadError.value = error instanceof Error ? error.message : 'Failed to load transactions.'
   } finally {
     loading.value = false
@@ -85,21 +169,46 @@ async function loadTransactions(): Promise<void> {
 }
 
 async function loadSuggestion(transaction: Transaction | null): Promise<void> {
-  if (!transaction) {
-    suggestion.value = null
+  suggestion.value = null
+  if (!transaction || !focusOpen.value) {
     return
   }
 
+  const transactionId = transaction.id
   try {
-    suggestion.value = await fetchTransactionSuggestion(transaction.id)
+    const nextSuggestion = await fetchTransactionSuggestion(transactionId)
+    if (focusOpen.value && currentFocusTransaction.value?.id === transactionId) {
+      suggestion.value = nextSuggestion
+    }
   } catch {
-    suggestion.value = null
+    if (currentFocusTransaction.value?.id === transactionId) {
+      suggestion.value = null
+    }
   }
 }
 
-async function categorize(bucket: Bucket): Promise<void> {
-  const transaction = currentTransaction.value
+function openFocus(startId?: number): void {
+  const monthTransactions = activeMonthTransactions.value
+  if (!monthTransactions.length) {
+    return
+  }
 
+  const requestedIndex = startId == null
+    ? 0
+    : monthTransactions.findIndex((transaction) => transaction.id === startId)
+  const startIndex = requestedIndex >= 0 ? requestedIndex : 0
+  const ids = monthTransactions.slice(startIndex).map((transaction) => transaction.id)
+
+  focusQueueIds.value = ids
+  focusUndoStack.value = []
+  focusCompleted.value = 0
+  focusTotal.value = ids.length
+  updateError.value = null
+  focusOpen.value = true
+}
+
+async function categorize(bucket: Bucket): Promise<void> {
+  const transaction = currentFocusTransaction.value
   if (!transaction || updating.value) {
     return
   }
@@ -108,13 +217,11 @@ async function categorize(bucket: Bucket): Promise<void> {
   updateError.value = null
 
   try {
-    await updateTransaction(transaction.id, {
-      bucket,
-      reviewed: true,
-    })
-
-    undoStack.value = [...undoStack.value, transaction.id]
-    currentIndex.value += 1
+    await updateTransaction(transaction.id, { bucket, reviewed: true })
+    transactions.value = transactions.value.filter((item) => item.id !== transaction.id)
+    focusQueueIds.value = focusQueueIds.value.filter((id) => id !== transaction.id)
+    focusUndoStack.value = [...focusUndoStack.value, transaction.id]
+    focusCompleted.value += 1
     selectedIds.value = selectedIds.value.filter((id) => id !== transaction.id)
   } catch (error) {
     updateError.value =
@@ -125,8 +232,7 @@ async function categorize(bucket: Bucket): Promise<void> {
 }
 
 async function undo(): Promise<void> {
-  const lastId = undoStack.value[undoStack.value.length - 1]
-
+  const lastId = focusUndoStack.value[focusUndoStack.value.length - 1]
   if (lastId == null || updating.value) {
     return
   }
@@ -135,14 +241,16 @@ async function undo(): Promise<void> {
   updateError.value = null
 
   try {
-    await undoTransactionReview(lastId)
-    undoStack.value = undoStack.value.slice(0, -1)
-
-    if (currentIndex.value > 0) {
-      currentIndex.value -= 1
-    } else {
-      await loadTransactions()
+    const restored = await undoTransactionReview(lastId)
+    if (!transactions.value.some((transaction) => transaction.id === restored.id)) {
+      transactions.value = [...transactions.value, restored]
     }
+    focusUndoStack.value = focusUndoStack.value.slice(0, -1)
+    focusQueueIds.value = [
+      restored.id,
+      ...focusQueueIds.value.filter((id) => id !== restored.id),
+    ]
+    focusCompleted.value = Math.max(0, focusCompleted.value - 1)
   } catch (error) {
     updateError.value = error instanceof Error ? error.message : 'Failed to undo review.'
   } finally {
@@ -151,15 +259,12 @@ async function undo(): Promise<void> {
 }
 
 function skip(): void {
-  const current = currentTransaction.value
-  if (!current || transactions.value.length <= 1) {
+  if (focusQueueIds.value.length <= 1) {
     return
   }
 
-  // Rotate the current card to the end so skip never falsely completes the queue.
-  const before = transactions.value.slice(0, currentIndex.value)
-  const after = transactions.value.slice(currentIndex.value + 1)
-  transactions.value = [...before, ...after, current]
+  const [currentId, ...remainingIds] = focusQueueIds.value
+  focusQueueIds.value = [...remainingIds, currentId]
 }
 
 async function categorizeSelected(bucket: Bucket): Promise<void> {
@@ -172,45 +277,27 @@ async function categorizeSelected(bucket: Bucket): Promise<void> {
   bulkStatus.value = null
 
   const ids = [...selectedIds.value]
-  const currentId = currentTransaction.value?.id ?? null
   const results = await Promise.allSettled(
     ids.map((id) => updateTransaction(id, { bucket, reviewed: true })),
   )
-
   const fulfilled: number[] = []
-  let failed = 0
+  const failed: number[] = []
 
   results.forEach((result, index) => {
+    const id = ids[index]
     if (result.status === 'fulfilled') {
-      fulfilled.push(ids[index])
+      fulfilled.push(id)
     } else {
-      failed += 1
+      failed.push(id)
     }
   })
 
   if (fulfilled.length) {
     const done = new Set(fulfilled)
-    const removedBeforeCurrent = transactions.value
-      .slice(0, currentIndex.value)
-      .filter((tx) => done.has(tx.id)).length
-
-    transactions.value = transactions.value.filter((tx) => !done.has(tx.id))
-
-    if (currentId != null && done.has(currentId)) {
-      currentIndex.value = Math.min(
-        currentIndex.value,
-        Math.max(0, transactions.value.length - 1),
-      )
-    } else {
-      currentIndex.value = Math.max(0, currentIndex.value - removedBeforeCurrent)
-      if (currentIndex.value >= transactions.value.length) {
-        currentIndex.value = Math.max(0, transactions.value.length - 1)
-      }
-    }
-
-    selectedIds.value = []
+    transactions.value = transactions.value.filter((transaction) => !done.has(transaction.id))
+    selectedIds.value = failed
     bulkUndoIds.value = fulfilled
-    bulkStatus.value = `Categorized ${fulfilled.length}${failed ? `, ${failed} failed` : ''}.`
+    bulkStatus.value = `Categorized ${fulfilled.length}${failed.length ? `, ${failed.length} failed` : ''}.`
   } else {
     updateError.value = 'Could not categorize selected transactions.'
   }
@@ -225,22 +312,26 @@ async function undoBulk(): Promise<void> {
 
   updating.value = true
   updateError.value = null
-
   const ids = [...bulkUndoIds.value]
-  let restored = 0
+  const restoredTransactions: Transaction[] = []
 
   for (const id of ids) {
     try {
-      await undoTransactionReview(id)
-      restored += 1
+      restoredTransactions.push(await undoTransactionReview(id))
     } catch {
-      // Keep undoing remaining ids.
+      // Continue restoring the remaining successful updates.
     }
   }
 
+  const restoredIds = new Set(restoredTransactions.map((transaction) => transaction.id))
+  transactions.value = [
+    ...transactions.value.filter((transaction) => !restoredIds.has(transaction.id)),
+    ...restoredTransactions,
+  ]
   bulkUndoIds.value = []
-  bulkStatus.value = restored ? `Undid ${restored}.` : 'Could not undo bulk categorization.'
-  await loadTransactions()
+  bulkStatus.value = restoredTransactions.length
+    ? `Undid ${restoredTransactions.length}.`
+    : 'Could not undo bulk categorization.'
   updating.value = false
 }
 
@@ -254,17 +345,8 @@ async function categorizeOne(id: number, bucket: Bucket): Promise<void> {
 
   try {
     await updateTransaction(id, { bucket, reviewed: true })
-    const index = transactions.value.findIndex((tx) => tx.id === id)
-    if (index === currentIndex.value) {
-      undoStack.value = [...undoStack.value, id]
-      currentIndex.value += 1
-    } else {
-      transactions.value = transactions.value.filter((tx) => tx.id !== id)
-      if (index < currentIndex.value) {
-        currentIndex.value -= 1
-      }
-    }
-    selectedIds.value = selectedIds.value.filter((value) => value !== id)
+    transactions.value = transactions.value.filter((transaction) => transaction.id !== id)
+    selectedIds.value = selectedIds.value.filter((selectedId) => selectedId !== id)
   } catch (error) {
     updateError.value =
       error instanceof Error ? error.message : 'Failed to update this transaction.'
@@ -283,7 +365,7 @@ async function handleSmartReview(): Promise<void> {
 
   try {
     smartResult.value = await runSmartReview()
-    await loadTransactions()
+    await loadTransactions(activeMonthKey.value)
   } catch (error) {
     updateError.value =
       error instanceof Error ? error.message : 'Smart Review failed.'
@@ -292,57 +374,50 @@ async function handleSmartReview(): Promise<void> {
   }
 }
 
-function jumpTo(id: number): void {
-  const index = transactions.value.findIndex((tx) => tx.id === id)
-  if (index >= 0) {
-    currentIndex.value = index
-    mode.value = 'swipe'
-  }
-}
-
 function onKeydown(event: KeyboardEvent): void {
-  if (updating.value || loading.value || !currentTransaction.value) {
-    if (event.key.toLowerCase() === 'u') {
-      event.preventDefault()
-      void undo()
-    }
+  if (!focusOpen.value) {
+    return
+  }
+
+  if (event.key === 'Escape' && !updating.value) {
+    event.preventDefault()
+    closeFocus()
     return
   }
 
   const target = event.target as HTMLElement | null
-  if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) {
+  if (target && ['A', 'INPUT', 'SELECT', 'TEXTAREA'].includes(target.tagName)) {
     return
   }
 
-  if (event.key === 'ArrowLeft') {
-    event.preventDefault()
-    void categorize('want')
-  } else if (event.key === 'ArrowRight') {
-    event.preventDefault()
-    void categorize('need')
-  } else if (event.key === 'ArrowDown') {
-    event.preventDefault()
-    void categorize('savings')
-  } else if (event.key.toLowerCase() === 'u') {
+  if (event.key.toLowerCase() === 'u') {
     event.preventDefault()
     void undo()
+  } else if (!updating.value && currentFocusTransaction.value) {
+    if (event.key === 'ArrowLeft') {
+      event.preventDefault()
+      void categorize('want')
+    } else if (event.key === 'ArrowRight') {
+      event.preventDefault()
+      void categorize('need')
+    } else if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      void categorize('savings')
+    }
   }
 }
 
-watch(currentTransaction, (transaction) => {
+watch(currentFocusTransaction, (transaction) => {
   void loadSuggestion(transaction)
 })
 
 onMounted(() => {
-  syncWideLayout()
-  void loadTransactions()
+  void loadTransactions(null)
   window.addEventListener('keydown', onKeydown)
-  window.addEventListener('resize', syncWideLayout)
 })
 
 onUnmounted(() => {
   window.removeEventListener('keydown', onKeydown)
-  window.removeEventListener('resize', syncWideLayout)
 })
 </script>
 
@@ -350,7 +425,7 @@ onUnmounted(() => {
   <section class="review-view">
     <PageHeader
       title="Review transactions"
-      subtitle="Swipe to categorize, or select several and categorize at once."
+      subtitle="Review one month at a time, categorize in bulk, or enter Focus mode."
     >
       <template #actions>
         <button type="button" class="btn btn-ghost" @click="tipsOpen = !tipsOpen">
@@ -369,31 +444,9 @@ onUnmounted(() => {
     </PageHeader>
 
     <div v-if="tipsOpen" class="tips panel">
-      <p>Drag left for Wants, right for Needs, down for Savings.</p>
-      <p>Keyboard: ← Want · → Need · ↓ Savings · U Undo.</p>
-    </div>
-
-    <div class="mode-toggle" role="tablist" aria-label="Review mode">
-      <button
-        type="button"
-        role="tab"
-        class="mode"
-        :class="{ active: mode === 'swipe' }"
-        :aria-selected="mode === 'swipe'"
-        @click="mode = 'swipe'"
-      >
-        Swipe
-      </button>
-      <button
-        type="button"
-        role="tab"
-        class="mode"
-        :class="{ active: mode === 'multi' }"
-        :aria-selected="mode === 'multi'"
-        @click="mode = 'multi'"
-      >
-        Multi-select
-      </button>
+      <p>Select several transactions to categorize them together.</p>
+      <p>In Focus mode: drag left for Wants, right for Needs, or down for Savings.</p>
+      <p>Keyboard in Focus mode: ← Want · → Need · ↓ Savings · U Undo · Esc Close.</p>
     </div>
 
     <div v-if="smartResult" class="smart-summary" role="status">
@@ -405,14 +458,13 @@ onUnmounted(() => {
 
     <p v-if="loading" class="sr-only" role="status">Loading transactions…</p>
 
-    <div v-if="loading" class="loading-grid">
-      <SkeletonBlock height="22rem" radius="var(--radius-lg)" />
-      <SkeletonBlock height="22rem" radius="var(--radius)" />
-    </div>
+    <SkeletonBlock v-if="loading" height="28rem" radius="var(--radius)" />
 
     <div v-else-if="loadError" class="panel error" role="alert">
       <p>{{ loadError }}</p>
-      <button type="button" class="btn btn-primary" @click="loadTransactions">Try again</button>
+      <button type="button" class="btn btn-primary" @click="loadTransactions(null)">
+        Try again
+      </button>
     </div>
 
     <div v-else-if="isComplete" role="status">
@@ -421,74 +473,104 @@ onUnmounted(() => {
         title="All caught up"
         body="There are no unreviewed transactions left to categorize."
       >
-        <button type="button" class="btn btn-ghost" @click="loadTransactions">Refresh</button>
+        <button type="button" class="btn btn-ghost" @click="loadTransactions(null)">Refresh</button>
       </EmptyState>
     </div>
 
-    <div v-else class="workspace">
-      <div v-if="wideLayout || mode === 'swipe'" class="swipe-pane">
-        <p class="progress" aria-live="polite">{{ progressLabel }}</p>
-        <div class="dots" aria-hidden="true">
-          <span
-            v-for="(tx, index) in transactions.slice(0, 8)"
-            :key="tx.id"
-            class="dot"
-            :class="{ active: index === currentIndex }"
-          />
-        </div>
-
-        <div class="stack">
-          <div class="deck" aria-hidden="true">
-            <div class="back-card one" />
-            <div class="back-card two" />
+    <template v-else>
+      <div class="month-toolbar panel">
+        <div class="month-navigation" aria-label="Review month navigation">
+          <button
+            type="button"
+            class="btn btn-ghost"
+            :disabled="!canGoOlder"
+            aria-label="Show previous month"
+            @click="goOlder"
+          >
+            <AppIcon name="arrow-left" :size="16" />
+            Previous
+          </button>
+          <div class="month-heading">
+            <span>Reviewing</span>
+            <strong>{{ activeMonthLabel }}</strong>
           </div>
-
-          <ReviewCard
-            v-if="currentTransaction"
-            :transaction="currentTransaction"
-            :suggestion="suggestion"
-            :updating="updating"
-            @categorize="categorize"
-          />
+          <button
+            type="button"
+            class="btn btn-ghost"
+            :disabled="!canGoNewer"
+            aria-label="Show next month"
+            @click="goNewer"
+          >
+            Next
+            <AppIcon name="arrow-right" :size="16" />
+          </button>
         </div>
 
-        <ReviewActions
-          :updating="updating"
-          :can-undo="undoStack.length > 0"
-          @categorize="categorize"
-          @undo="undo"
-          @skip="skip"
-        />
-
-        <p v-if="updateError" class="inline-error" role="alert">{{ updateError }}</p>
-        <p v-if="updating" class="status" role="status">Saving category…</p>
+        <button
+          type="button"
+          class="btn btn-primary"
+          :disabled="updating || !activeMonthTransactions.length"
+          @click="openFocus()"
+        >
+          <AppIcon name="target" :size="16" />
+          Start Focus mode
+        </button>
       </div>
 
       <ReviewQueueList
-        v-if="wideLayout || mode === 'multi'"
-        :transactions="remainingQueue"
-        :current-id="currentTransaction?.id ?? null"
+        v-if="activeMonthTransactions.length"
+        :key="activeMonthKey ?? undefined"
+        :transactions="activeMonthTransactions"
+        :month-label="activeMonthLabel"
         :selected-ids="selectedIds"
         :updating="updating"
         @update:selected-ids="selectedIds = $event"
-        @jump="jumpTo"
+        @focus="openFocus"
         @categorize-selected="categorizeSelected"
         @clear="selectedIds = []"
         @categorize-one="categorizeOne"
       />
-    </div>
 
-    <div v-if="bulkStatus" class="bulk-status panel">
-      <p>{{ bulkStatus }}</p>
-      <button
-        v-if="bulkUndoIds.length"
-        type="button"
-        class="btn btn-ghost"
-        @click="undoBulk"
-      >
-        Undo {{ bulkUndoIds.length }}
-      </button>
-    </div>
+      <div v-else class="panel month-empty" role="status">
+        <AppIcon name="check" :size="24" />
+        <div>
+          <h2>{{ activeMonthLabel }} is complete</h2>
+          <p>Choose another month to continue reviewing transactions.</p>
+        </div>
+      </div>
+
+      <p v-if="updateError && !focusOpen" class="inline-error" role="alert">
+        {{ updateError }}
+      </p>
+
+      <div v-if="bulkStatus" class="bulk-status panel" role="status">
+        <p>{{ bulkStatus }}</p>
+        <button
+          v-if="bulkUndoIds.length"
+          type="button"
+          class="btn btn-ghost"
+          :disabled="updating"
+          @click="undoBulk"
+        >
+          Undo {{ bulkUndoIds.length }}
+        </button>
+      </div>
+    </template>
+
+    <ReviewFocusDialog
+      v-if="focusOpen"
+      :transaction="currentFocusTransaction"
+      :suggestion="suggestion"
+      :month-label="activeMonthLabel"
+      :progress-label="focusProgressLabel"
+      :updating="updating"
+      :can-undo="focusUndoStack.length > 0"
+      :error="updateError"
+      @close="closeFocus"
+      @categorize="categorize"
+      @undo="undo"
+      @skip="skip"
+    />
   </section>
 </template>
 
@@ -508,108 +590,42 @@ onUnmounted(() => {
   margin-top: var(--space-2);
 }
 
-.mode-toggle {
-  display: inline-flex;
-  gap: var(--space-1);
-  padding: 0.2rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-pill);
-  background: var(--bg-elevated);
-  justify-self: start;
-}
-
-.mode {
-  min-height: 2rem;
-  padding: 0.35rem 0.9rem;
-  border: 0;
-  border-radius: var(--radius-pill);
-  background: transparent;
-  color: var(--text-muted);
-  font-size: 0.8125rem;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.mode.active {
-  color: var(--text);
-  background: var(--bg-soft);
-  box-shadow: inset 0 -2px 0 var(--accent);
-}
-
 .smart-summary {
   padding: 0.75rem 1rem;
+  border: 1px solid rgba(34, 197, 94, 0.35);
   border-radius: var(--radius-sm);
   background: var(--savings-soft);
-  border: 1px solid rgba(34, 197, 94, 0.35);
 }
 
-.loading-grid {
+.month-toolbar {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.month-navigation {
   display: grid;
-  grid-template-columns: minmax(0, 26rem) minmax(0, 1fr);
-  gap: var(--space-5);
+  grid-template-columns: auto minmax(9rem, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
 }
 
-.workspace {
+.month-heading {
   display: grid;
-  grid-template-columns: minmax(0, 26rem) minmax(0, 1fr);
-  gap: var(--space-5);
-  align-items: start;
+  justify-items: center;
+  gap: 0.1rem;
+  text-align: center;
 }
 
-.swipe-pane {
-  display: grid;
-  gap: var(--space-4);
-}
-
-.progress {
-  margin: 0;
+.month-heading span {
   color: var(--text-dim);
-  font-size: 0.8125rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
-.dots {
-  display: flex;
-  gap: 0.35rem;
-}
-
-.dot {
-  width: 0.4rem;
-  height: 0.4rem;
-  border-radius: var(--radius-pill);
-  background: rgba(255, 255, 255, 0.15);
-}
-
-.dot.active {
-  background: var(--accent);
-}
-
-.stack {
-  position: relative;
-}
-
-.deck {
-  position: absolute;
-  inset: 0.75rem 0.75rem auto;
-  height: 8rem;
-  pointer-events: none;
-}
-
-.back-card {
-  position: absolute;
-  inset: 0;
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--border);
-  background: var(--bg-soft);
-}
-
-.back-card.one {
-  transform: translateY(10px) scale(0.98);
-  opacity: 0.7;
-}
-
-.back-card.two {
-  transform: translateY(18px) scale(0.96);
-  opacity: 0.45;
+.month-heading strong {
+  font-size: 1.05rem;
 }
 
 .inline-error {
@@ -617,20 +633,35 @@ onUnmounted(() => {
   color: var(--danger);
 }
 
-.status {
-  margin: 0;
-  color: var(--text-muted);
-}
-
 .panel.error {
   border-color: rgba(239, 68, 68, 0.45);
   background: var(--danger-soft);
 }
 
+.month-empty {
+  grid-template-columns: auto 1fr;
+  align-items: center;
+}
+
+.month-empty h2,
+.month-empty p {
+  margin: 0;
+}
+
+.month-empty h2 {
+  font-size: 1.0625rem;
+}
+
+.month-empty p {
+  margin-top: var(--space-1);
+  color: var(--text-muted);
+  font-size: 0.875rem;
+}
+
 .bulk-status {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  justify-content: space-between;
   gap: var(--space-3);
 }
 
@@ -639,10 +670,32 @@ onUnmounted(() => {
   color: var(--text-muted);
 }
 
-@media (max-width: 1100px) {
-  .workspace,
-  .loading-grid {
+@media (max-width: 760px) {
+  .month-toolbar {
     grid-template-columns: 1fr;
+  }
+
+  .month-toolbar > .btn {
+    width: 100%;
+  }
+}
+
+@media (max-width: 560px) {
+  .month-navigation {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .month-heading {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+
+  .month-navigation .btn {
+    grid-row: 2;
+  }
+
+  .month-navigation .btn:last-child {
+    grid-column: 2;
   }
 }
 </style>

@@ -6,8 +6,13 @@
  * - undo previous review
  * - smart review reload
  */
-import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+  enableAutoUnmount,
+  flushPromises,
+  mount,
+  type DOMWrapper,
+} from '@vue/test-utils'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   fetchReviewQueue,
   fetchTransactionSuggestion,
@@ -17,6 +22,8 @@ import {
 import { runSmartReview } from '../api/smartReviewApi'
 import type { Transaction } from '../types/transaction'
 import TransactionReviewView from './TransactionReviewView.vue'
+
+enableAutoUnmount(afterEach)
 
 vi.mock('../api/transactionApi', () => ({
   fetchReviewQueue: vi.fn(),
@@ -65,6 +72,15 @@ const secondTransaction: Transaction = {
   notes: null,
 }
 
+const olderMonthTransaction: Transaction = {
+  ...firstTransaction,
+  id: 3,
+  merchant: 'June Books',
+  amount_cents: 2400,
+  amount: '24.00',
+  transaction_date: '2026-06-15',
+}
+
 function deferred<T>(): {
   promise: Promise<T>
   resolve: (value: T) => void
@@ -81,7 +97,11 @@ function deferred<T>(): {
   return { promise, resolve, reject }
 }
 
-function buttonContaining(wrapper: VueWrapper, name: string) {
+interface ButtonContainer {
+  findAll(selector: string): DOMWrapper<Element>[]
+}
+
+function buttonContaining(wrapper: ButtonContainer, name: string) {
   const button = wrapper
     .findAll('button')
     .find((candidate) => candidate.text().includes(name))
@@ -110,7 +130,6 @@ beforeEach(() => {
 })
 
 describe('TransactionReviewView', () => {
-  /** Shows a status message while the review queue request is in flight. */
   it('shows a loading state while transactions are being fetched', () => {
     vi.mocked(fetchReviewQueue).mockReturnValue(new Promise(() => {}))
 
@@ -119,24 +138,294 @@ describe('TransactionReviewView', () => {
     expect(wrapper.get('[role="status"]').text()).toBe('Loading transactions…')
   })
 
-  /** Renders merchant, formatted dollars, date, suggestion, and category actions. */
-  it('renders transaction details with formatted currency and date', async () => {
-    vi.mocked(fetchReviewQueue).mockResolvedValue([firstTransaction])
+  it('shows the newest month as a newest-first multi-select queue by default', async () => {
+    vi.mocked(fetchReviewQueue).mockResolvedValue([
+      olderMonthTransaction,
+      firstTransaction,
+      secondTransaction,
+    ])
 
     const wrapper = mount(TransactionReviewView)
     await flushPromises()
 
-    expect(wrapper.text()).toContain('Transaction 1 of 1')
-    expect(wrapper.text()).toContain('HEB')
-    expect(wrapper.text()).toContain('$84.23')
-    expect(wrapper.text()).toContain('July 20, 2026')
-    expect(wrapper.text()).toContain('Suggestion')
-    expect(buttonContaining(wrapper, 'Need').exists()).toBe(true)
-    expect(buttonContaining(wrapper, 'Want').exists()).toBe(true)
-    expect(buttonContaining(wrapper, 'Savings').exists()).toBe(true)
+    expect(wrapper.text()).toContain('July 2026')
+    expect(wrapper.text()).toContain('2 transactions awaiting review')
+    expect(wrapper.text()).not.toContain('June Books')
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('SwipeMulti-select')
+
+    const focusRows = wrapper.findAll('.focus-transaction')
+    expect(focusRows.map((row) => row.text())).toEqual([
+      expect.stringContaining('Shell Gas'),
+      expect.stringContaining('HEB'),
+    ])
   })
 
-  /** Empty queue shows the “all caught up” completion state. */
+  it('navigates between available months and scopes Focus mode to the displayed month', async () => {
+    vi.mocked(fetchReviewQueue).mockResolvedValue([
+      firstTransaction,
+      olderMonthTransaction,
+      secondTransaction,
+    ])
+
+    const wrapper = mount(TransactionReviewView)
+    await flushPromises()
+
+    await buttonContaining(wrapper, 'Previous').trigger('click')
+
+    expect(wrapper.text()).toContain('June 2026')
+    expect(wrapper.text()).toContain('June Books')
+    expect(wrapper.text()).not.toContain('Shell Gas')
+
+    await buttonContaining(wrapper, 'Start Focus mode').trigger('click')
+    await flushPromises()
+
+    const dialog = wrapper.get('[role="dialog"]')
+    expect(dialog.text()).toContain('June 2026')
+    expect(dialog.text()).toContain('June Books')
+    expect(dialog.text()).toContain('Transaction 1 of 1')
+  })
+
+  it('opens Focus mode at the newest transaction and advances toward older transactions', async () => {
+    vi.mocked(fetchReviewQueue).mockResolvedValue([firstTransaction, secondTransaction])
+    vi.mocked(updateTransaction).mockResolvedValue({
+      ...secondTransaction,
+      bucket: 'want',
+      reviewed: true,
+    })
+
+    const wrapper = mount(TransactionReviewView)
+    await flushPromises()
+
+    await buttonContaining(wrapper, 'Start Focus mode').trigger('click')
+    await flushPromises()
+
+    let dialog = wrapper.get('[role="dialog"]')
+    expect(dialog.text()).toContain('Shell Gas')
+    expect(dialog.text()).toContain('July 21, 2026')
+    expect(dialog.text()).toContain('Transaction 1 of 2')
+    expect(dialog.text()).toContain('Suggestion')
+
+    await buttonContaining(dialog, 'Wants').trigger('click')
+    await flushPromises()
+
+    expect(updateTransaction).toHaveBeenCalledWith(2, {
+      bucket: 'want',
+      reviewed: true,
+    })
+    dialog = wrapper.get('[role="dialog"]')
+    expect(dialog.text()).toContain('HEB')
+    expect(dialog.text()).toContain('Transaction 2 of 2')
+    expect(wrapper.findAll('.focus-transaction')).toHaveLength(1)
+  })
+
+  it('disables Focus actions while saving', async () => {
+    const update = deferred<Transaction>()
+    vi.mocked(fetchReviewQueue).mockResolvedValue([firstTransaction, secondTransaction])
+    vi.mocked(updateTransaction).mockReturnValue(update.promise)
+
+    const wrapper = mount(TransactionReviewView)
+    await flushPromises()
+
+    await buttonContaining(wrapper, 'Start Focus mode').trigger('click')
+    const dialog = wrapper.get('[role="dialog"]')
+    await buttonContaining(dialog, 'Wants').trigger('click')
+
+    expect(buttonContaining(dialog, 'Needs').attributes('disabled')).toBeDefined()
+    expect(buttonContaining(dialog, 'Wants').attributes('disabled')).toBeDefined()
+    expect(dialog.text()).toContain('Saving category…')
+    expect(updateTransaction).toHaveBeenCalledWith(2, {
+      bucket: 'want',
+      reviewed: true,
+    })
+
+    update.resolve({
+      ...secondTransaction,
+      bucket: 'want',
+      category: 'want',
+      reviewed: true,
+    })
+    await flushPromises()
+
+    expect(wrapper.get('[role="dialog"]').text()).toContain('HEB')
+  })
+
+  it('keeps the current transaction visible and reports update failures', async () => {
+    vi.mocked(fetchReviewQueue).mockResolvedValue([firstTransaction])
+    vi.mocked(updateTransaction).mockRejectedValue(new Error('Could not save category'))
+
+    const wrapper = mount(TransactionReviewView)
+    await flushPromises()
+
+    await buttonContaining(wrapper, 'Start Focus mode').trigger('click')
+    const dialog = wrapper.get('[role="dialog"]')
+    await buttonContaining(dialog, 'Needs').trigger('click')
+    await flushPromises()
+
+    expect(dialog.get('[role="alert"]').text()).toBe('Could not save category')
+    expect(dialog.text()).toContain('HEB')
+    expect(dialog.text()).toContain('Transaction 1 of 1')
+  })
+
+  it('opens Focus mode from a row at that transaction', async () => {
+    vi.mocked(fetchReviewQueue).mockResolvedValue([firstTransaction, secondTransaction])
+
+    const wrapper = mount(TransactionReviewView)
+    await flushPromises()
+
+    await wrapper.get('[aria-label="Open HEB in focus mode"]').trigger('click')
+    await flushPromises()
+
+    const dialog = wrapper.get('[role="dialog"]')
+    expect(dialog.text()).toContain('HEB')
+    expect(dialog.text()).toContain('Transaction 1 of 1')
+  })
+
+  it('skips and undoes transactions within the Focus queue', async () => {
+    vi.mocked(fetchReviewQueue).mockResolvedValue([firstTransaction, secondTransaction])
+    vi.mocked(updateTransaction).mockResolvedValue({
+      ...firstTransaction,
+      bucket: 'need',
+      category: 'need',
+      reviewed: true,
+    })
+    vi.mocked(undoTransactionReview).mockResolvedValue({
+      ...firstTransaction,
+      reviewed: false,
+    })
+
+    const wrapper = mount(TransactionReviewView)
+    await flushPromises()
+
+    await buttonContaining(wrapper, 'Start Focus mode').trigger('click')
+    let dialog = wrapper.get('[role="dialog"]')
+
+    await buttonContaining(dialog, 'Skip').trigger('click')
+    expect(dialog.text()).toContain('HEB')
+
+    await buttonContaining(dialog, 'Needs').trigger('click')
+    await flushPromises()
+
+    dialog = wrapper.get('[role="dialog"]')
+    await buttonContaining(dialog, 'Undo').trigger('click')
+    await flushPromises()
+
+    expect(undoTransactionReview).toHaveBeenCalledWith(1)
+    expect(wrapper.text()).toContain('HEB')
+  })
+
+  it('closes Focus mode with Escape and returns to the same month', async () => {
+    vi.mocked(fetchReviewQueue).mockResolvedValue([firstTransaction])
+
+    const wrapper = mount(TransactionReviewView)
+    await flushPromises()
+    await buttonContaining(wrapper, 'Start Focus mode').trigger('click')
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('July 2026')
+    expect(wrapper.text()).toContain('HEB')
+  })
+
+  it('uses category keyboard shortcuts only while Focus mode is open', async () => {
+    vi.mocked(fetchReviewQueue).mockResolvedValue([firstTransaction, secondTransaction])
+    vi.mocked(updateTransaction).mockResolvedValue({
+      ...secondTransaction,
+      bucket: 'need',
+      reviewed: true,
+    })
+
+    const wrapper = mount(TransactionReviewView)
+    await flushPromises()
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }))
+    expect(updateTransaction).not.toHaveBeenCalled()
+
+    await buttonContaining(wrapper, 'Start Focus mode').trigger('click')
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }))
+    await flushPromises()
+
+    expect(updateTransaction).toHaveBeenCalledWith(2, {
+      bucket: 'need',
+      reviewed: true,
+    })
+  })
+
+  it('bulk categorizes selected transactions, preserves failures, and supports undo', async () => {
+    vi.mocked(fetchReviewQueue).mockResolvedValue([firstTransaction, secondTransaction])
+    vi.mocked(updateTransaction).mockImplementation(async (id) => {
+      if (id === secondTransaction.id) {
+        throw new Error('Could not update Shell Gas')
+      }
+      return { ...firstTransaction, bucket: 'need', reviewed: true }
+    })
+    vi.mocked(undoTransactionReview).mockResolvedValue(firstTransaction)
+
+    const wrapper = mount(TransactionReviewView)
+    await flushPromises()
+
+    const checkboxes = wrapper.findAll('input[type="checkbox"]')
+    await checkboxes[1].setValue(true)
+    await checkboxes[2].setValue(true)
+    await buttonContaining(wrapper, 'Needs').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Categorized 1, 1 failed')
+    expect(wrapper.text()).toContain('Shell Gas')
+    expect(wrapper.text()).not.toContain('HEB')
+    expect(wrapper.text()).toContain('1 selected')
+
+    await buttonContaining(wrapper, 'Undo 1').trigger('click')
+    await flushPromises()
+
+    expect(undoTransactionReview).toHaveBeenCalledWith(1)
+    expect(wrapper.text()).toContain('HEB')
+  })
+
+  it('categorizes one transaction from its row', async () => {
+    vi.mocked(fetchReviewQueue).mockResolvedValue([firstTransaction])
+    vi.mocked(updateTransaction).mockResolvedValue({
+      ...firstTransaction,
+      bucket: 'savings',
+      reviewed: true,
+    })
+
+    const wrapper = mount(TransactionReviewView)
+    await flushPromises()
+
+    await wrapper.get('select.bucket').setValue('savings')
+    await flushPromises()
+
+    expect(updateTransaction).toHaveBeenCalledWith(1, {
+      bucket: 'savings',
+      reviewed: true,
+    })
+    expect(wrapper.text()).toContain('All caught up')
+  })
+
+  it('keeps an emptied month visible so the user can navigate to another month', async () => {
+    vi.mocked(fetchReviewQueue).mockResolvedValue([olderMonthTransaction, firstTransaction])
+    vi.mocked(updateTransaction).mockResolvedValue({
+      ...firstTransaction,
+      bucket: 'savings',
+      reviewed: true,
+    })
+
+    const wrapper = mount(TransactionReviewView)
+    await flushPromises()
+
+    await wrapper.get('select.bucket').setValue('savings')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('July 2026 is complete')
+    expect(buttonContaining(wrapper, 'Previous').attributes('disabled')).toBeUndefined()
+
+    await buttonContaining(wrapper, 'Previous').trigger('click')
+    expect(wrapper.text()).toContain('June Books')
+  })
+
   it('shows the completion state when no transactions remain', async () => {
     vi.mocked(fetchReviewQueue).mockResolvedValue([])
 
@@ -147,7 +436,6 @@ describe('TransactionReviewView', () => {
     expect(wrapper.text()).toContain('There are no unreviewed transactions left')
   })
 
-  /** Load failure surfaces an alert; Try again refetches the queue. */
   it('shows a load error and retries the request', async () => {
     vi.mocked(fetchReviewQueue)
       .mockRejectedValueOnce(new Error('Unable to load transactions'))
@@ -165,84 +453,6 @@ describe('TransactionReviewView', () => {
     expect(wrapper.text()).toContain('All caught up')
   })
 
-  /** While saving, buttons disable; on success the queue advances to the next item. */
-  it('disables category buttons while saving and advances after success', async () => {
-    const update = deferred<Transaction>()
-    vi.mocked(fetchReviewQueue).mockResolvedValue([firstTransaction, secondTransaction])
-    vi.mocked(updateTransaction).mockReturnValue(update.promise)
-
-    const wrapper = mount(TransactionReviewView)
-    await flushPromises()
-
-    await buttonContaining(wrapper, 'Want').trigger('click')
-
-    expect(buttonContaining(wrapper, 'Need').attributes('disabled')).toBeDefined()
-    expect(buttonContaining(wrapper, 'Want').attributes('disabled')).toBeDefined()
-    expect(wrapper.text()).toContain('Saving category…')
-    expect(updateTransaction).toHaveBeenCalledWith(1, {
-      bucket: 'want',
-      reviewed: true,
-    })
-
-    update.resolve({
-      ...firstTransaction,
-      bucket: 'want',
-      category: 'want',
-      reviewed: true,
-    })
-    await flushPromises()
-
-    expect(wrapper.text()).toContain('Transaction 2 of 2')
-    expect(wrapper.text()).toContain('Shell Gas')
-    expect(buttonContaining(wrapper, 'Need').attributes('disabled')).toBeUndefined()
-  })
-
-  /** Failed categorize keeps the same transaction visible and shows an error. */
-  it('keeps the current transaction visible and reports update failures', async () => {
-    vi.mocked(fetchReviewQueue).mockResolvedValue([firstTransaction])
-    vi.mocked(updateTransaction).mockRejectedValue(new Error('Could not save category'))
-
-    const wrapper = mount(TransactionReviewView)
-    await flushPromises()
-
-    await buttonContaining(wrapper, 'Need').trigger('click')
-    await flushPromises()
-
-    expect(wrapper.get('[role="alert"]').text()).toBe('Could not save category')
-    expect(wrapper.text()).toContain('HEB')
-    expect(wrapper.text()).toContain('Transaction 1 of 1')
-    expect(buttonContaining(wrapper, 'Need').attributes('disabled')).toBeUndefined()
-  })
-
-  /** Undo calls the undo API and restores the previously reviewed transaction. */
-  it('undoes the previous review', async () => {
-    vi.mocked(fetchReviewQueue).mockResolvedValue([firstTransaction, secondTransaction])
-    vi.mocked(updateTransaction).mockResolvedValue({
-      ...firstTransaction,
-      bucket: 'need',
-      category: 'need',
-      reviewed: true,
-    })
-    vi.mocked(undoTransactionReview).mockResolvedValue({
-      ...firstTransaction,
-      reviewed: false,
-    })
-
-    const wrapper = mount(TransactionReviewView)
-    await flushPromises()
-
-    await buttonContaining(wrapper, 'Need').trigger('click')
-    await flushPromises()
-    expect(wrapper.text()).toContain('Shell Gas')
-
-    await buttonContaining(wrapper, 'Undo').trigger('click')
-    await flushPromises()
-
-    expect(undoTransactionReview).toHaveBeenCalledWith(1)
-    expect(wrapper.text()).toContain('HEB')
-  })
-
-  /** Smart Review runs the batch endpoint and reloads the remaining queue. */
   it('runs smart review and reloads the queue', async () => {
     vi.mocked(fetchReviewQueue)
       .mockResolvedValueOnce([firstTransaction])
