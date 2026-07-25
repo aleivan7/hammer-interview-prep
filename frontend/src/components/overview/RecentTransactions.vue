@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { BUCKET_LABELS } from '../../types/bucket'
 import type { Transaction } from '../../types/transaction'
-import { formatDollars, formatShortDate } from '../../utils/money'
+import { formatRelativeDay } from '../../utils/dates'
+import { formatSigned, isCredit, signedAmountCents } from '../../utils/transactions'
+import MerchantAvatar from '../ui/MerchantAvatar.vue'
 
 defineProps<{
   transactions: Transaction[]
@@ -10,86 +11,79 @@ defineProps<{
 
 <template>
   <section class="panel">
-    <header>
-      <h2>Recent activity</h2>
+    <header class="panel-header">
+      <h2>Recent transactions</h2>
       <RouterLink class="link" to="/activity">View all</RouterLink>
     </header>
 
-    <ul v-if="transactions.length">
-      <li v-for="tx in transactions" :key="tx.id">
-        <div>
-          <strong>{{ tx.merchant }}</strong>
-          <span
-            >{{ formatShortDate(tx.transaction_date) }} ·
-            {{ tx.bucket ? BUCKET_LABELS[tx.bucket] : 'Unreviewed' }}</span
-          >
+    <ul v-if="transactions.length" class="panel-rows">
+      <li v-for="tx in transactions" :key="tx.id" class="row">
+        <div class="left">
+          <MerchantAvatar :name="tx.merchant" :size="36" />
+          <div>
+            <strong>{{ tx.merchant }}</strong>
+            <span
+              >{{ formatRelativeDay(tx.transaction_date)
+              }}{{ tx.account ? ` · ${tx.account.name}` : '' }}</span
+            >
+          </div>
         </div>
-        <span class="amount">{{ formatDollars(tx.amount) }}</span>
+        <span class="amount money" :class="isCredit(tx) ? 'credit' : 'debit'">
+          {{ formatSigned(signedAmountCents(tx)) }}
+        </span>
       </li>
     </ul>
     <p v-else class="empty">No recent transactions.</p>
+
+    <RouterLink class="footer-link link" to="/activity">View all activity →</RouterLink>
   </section>
 </template>
 
 <style scoped>
-.panel {
-  display: grid;
-  gap: 1rem;
-  padding: 1.25rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg-elevated);
-}
-
-header {
+.row {
   display: flex;
   justify-content: space-between;
-  align-items: baseline;
-  gap: 1rem;
+  gap: var(--space-4);
+  align-items: center;
+  min-height: 3.5rem;
+  padding: var(--space-3) 0;
 }
 
-header h2 {
-  margin: 0;
-  font-family: var(--font-display);
-  font-size: 1.25rem;
+.left {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  min-width: 0;
 }
 
-.link {
-  color: var(--need);
-  font-size: 0.9rem;
+.left div {
+  display: grid;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.left strong {
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.left span {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+}
+
+.amount {
+  font-size: 0.875rem;
+  font-weight: 600;
 }
 
 .empty {
   margin: 0;
   color: var(--text-muted);
+  font-size: 0.875rem;
 }
 
-ul {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 0.75rem;
-}
-
-li {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-}
-
-li div {
-  display: grid;
-  gap: 0.15rem;
-}
-
-li span {
-  color: var(--text-muted);
-  font-size: 0.85rem;
-}
-
-.amount {
-  color: var(--text);
-  font-variant-numeric: tabular-nums;
+.footer-link {
+  justify-self: start;
 }
 </style>

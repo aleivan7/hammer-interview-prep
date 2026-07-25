@@ -9,19 +9,24 @@ defineProps<{
 
 <template>
   <section class="panel">
-    <header>
-      <h2>Accounts</h2>
-      <p>Sync health for the demo persona</p>
+    <header class="panel-header">
+      <div>
+        <h2>Accounts</h2>
+        <p>Sync health for the demo persona</p>
+      </div>
     </header>
 
-    <ul>
-      <li v-for="account in accounts" :key="account.id">
-        <div>
-          <strong>{{ account.name }}</strong>
-          <span>{{ account.institution_name }} ···{{ account.mask }}</span>
+    <ul class="panel-rows">
+      <li v-for="account in accounts" :key="account.id" class="row">
+        <div class="left">
+          <span class="tile" aria-hidden="true">{{ account.logo_key.slice(0, 1).toUpperCase() }}</span>
+          <div>
+            <strong>{{ account.name }}</strong>
+            <span>{{ account.institution_name }} ···{{ account.mask }}</span>
+          </div>
         </div>
         <div class="right">
-          <span class="balance">{{ formatDollars(account.balance) }}</span>
+          <span class="balance money">{{ formatDollars(account.balance) }}</span>
           <span class="status" :data-status="account.sync_status">{{ account.sync_status }}</span>
         </div>
       </li>
@@ -30,73 +35,67 @@ defineProps<{
 </template>
 
 <style scoped>
-.panel {
-  display: grid;
-  gap: 1rem;
-  padding: 1.25rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg-elevated);
-}
-
-header h2 {
-  margin: 0;
-  font-family: var(--font-display);
-  font-size: 1.25rem;
-}
-
-header p {
-  margin: 0.35rem 0 0;
-  color: var(--text-muted);
-  font-size: 0.92rem;
-}
-
-ul {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 0.75rem;
-}
-
-li {
+.row {
   display: flex;
   justify-content: space-between;
-  gap: 1rem;
-  padding-bottom: 0.75rem;
-  border-bottom: 1px solid var(--border);
+  gap: var(--space-4);
+  padding: var(--space-3) 0;
 }
 
-li:last-child {
-  border-bottom: 0;
-  padding-bottom: 0;
+.left {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  min-width: 0;
 }
 
-li div {
+.tile {
   display: grid;
-  gap: 0.15rem;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: var(--radius-sm);
+  background: var(--bg-soft);
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
 }
 
-li span {
+.left div {
+  display: grid;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.left strong {
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.left span {
   color: var(--text-muted);
-  font-size: 0.85rem;
+  font-size: 0.75rem;
 }
 
 .right {
+  display: grid;
+  gap: 0.15rem;
   text-align: right;
 }
 
 .balance {
-  color: var(--text) !important;
-  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  font-size: 0.875rem;
+  font-weight: 600;
 }
 
 .status {
+  font-size: 0.72rem;
   text-transform: capitalize;
 }
 
 .status[data-status='healthy'] {
-  color: var(--savings);
+  color: var(--accent-text);
 }
 
 .status[data-status='error'] {
@@ -104,6 +103,6 @@ li span {
 }
 
 .status[data-status='pending'] {
-  color: var(--want);
+  color: #fcd34d;
 }
 </style>

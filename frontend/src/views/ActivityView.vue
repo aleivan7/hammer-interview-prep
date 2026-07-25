@@ -1,18 +1,24 @@
 <script setup lang="ts">
 import { onMounted, ref, shallowRef, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { fetchAccounts } from '../api/accountApi'
 import {
   createTransaction,
   fetchTransactions,
   updateTransaction,
 } from '../api/transactionApi'
+import ActivitySummary from '../components/activity/ActivitySummary.vue'
+import TransactionFeed from '../components/activity/TransactionFeed.vue'
 import TransactionFilters from '../components/activity/TransactionFilters.vue'
 import TransactionFormDialog from '../components/activity/TransactionFormDialog.vue'
-import TransactionTable from '../components/activity/TransactionTable.vue'
+import AppIcon from '../components/ui/AppIcon.vue'
+import PageHeader from '../components/ui/PageHeader.vue'
 import type { Account } from '../types/account'
 import type { Bucket } from '../types/bucket'
 import type { Transaction } from '../types/transaction'
+import { downloadTransactionsCsv } from '../utils/csv'
 
+const route = useRoute()
 const transactions = shallowRef<Transaction[]>([])
 const accounts = shallowRef<Account[]>([])
 const loading = shallowRef(true)
@@ -51,6 +57,12 @@ function openCreate(): void {
 function openEdit(transaction: Transaction): void {
   editing.value = transaction
   dialogOpen.value = true
+}
+
+function clearFilters(): void {
+  search.value = ''
+  bucket.value = ''
+  reviewed.value = ''
 }
 
 async function handleSubmit(payload: {
@@ -106,28 +118,59 @@ onMounted(async () => {
   }
 
   await load()
+
+  if (route?.query?.new === '1') {
+    openCreate()
+  }
 })
 </script>
 
 <template>
   <div class="activity">
-    <div class="toolbar">
-      <TransactionFilters
-        v-model:search="search"
-        v-model:bucket="bucket"
-        v-model:reviewed="reviewed"
-      />
-      <button type="button" class="primary" @click="openCreate">New transaction</button>
-    </div>
+    <PageHeader title="Activity" subtitle="Your transactions at a glance.">
+      <template #actions>
+        <button
+          type="button"
+          class="btn btn-ghost"
+          :disabled="!transactions.length"
+          @click="downloadTransactionsCsv(transactions)"
+        >
+          <AppIcon name="download" :size="16" />
+          Export
+        </button>
+        <button type="button" class="btn btn-primary" @click="openCreate">
+          <AppIcon name="plus" :size="16" />
+          New transaction
+        </button>
+      </template>
+    </PageHeader>
 
-    <p v-if="loading" class="status" role="status">Loading activity…</p>
-    <p v-else-if="error" class="error" role="alert">{{ error }}</p>
-
-    <TransactionTable
-      v-if="!loading"
-      :transactions="transactions"
-      @edit="openEdit"
+    <TransactionFilters
+      v-model:search="search"
+      v-model:bucket="bucket"
+      v-model:reviewed="reviewed"
     />
+
+    <p v-if="loading" class="sr-only" role="status">Loading activity…</p>
+    <p v-if="error" class="error" role="alert">{{ error }}</p>
+
+    <div class="layout">
+      <TransactionFeed
+        v-if="!loading"
+        :transactions="transactions"
+        @edit="openEdit"
+        @clear-filters="clearFilters"
+      />
+      <div v-else class="feed-skeleton panel">
+        <div v-for="n in 6" :key="n" class="skel-row" />
+      </div>
+
+      <ActivitySummary
+        :transactions="transactions"
+        :accounts="accounts"
+        :loading="loading"
+      />
+    </div>
 
     <TransactionFormDialog
       :open="dialogOpen"
@@ -143,34 +186,34 @@ onMounted(async () => {
 <style scoped>
 .activity {
   display: grid;
-  gap: 1rem;
-  max-width: 72rem;
+  gap: var(--space-5);
 }
 
-.toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 1rem;
-  align-items: end;
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 20rem;
+  gap: var(--space-5);
+  align-items: start;
 }
 
-.primary {
-  padding: 0.6rem 1rem;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: var(--need);
-  color: #071018;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.status,
 .error {
   margin: 0;
+  color: var(--danger);
 }
 
-.error {
-  color: var(--danger);
+.feed-skeleton {
+  gap: var(--space-3);
+}
+
+.skel-row {
+  height: 3.5rem;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+@media (max-width: 1180px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

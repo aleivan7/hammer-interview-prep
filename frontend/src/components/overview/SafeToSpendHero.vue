@@ -1,48 +1,113 @@
 <script setup lang="ts">
-import { shallowRef } from 'vue'
-import type { SafeToSpend } from '../../types/dashboard'
-import { formatDollars } from '../../utils/money'
+import { computed, shallowRef } from 'vue'
+import type { FinancialPlanSummary, SafeToSpend } from '../../types/dashboard'
+import { formatCents, formatDollars } from '../../utils/money'
+import AppIcon from '../ui/AppIcon.vue'
+import DonutChart from '../ui/DonutChart.vue'
 
 const props = defineProps<{
   forecast: SafeToSpend
+  plan: FinancialPlanSummary | null
 }>()
 
 const expanded = shallowRef(false)
+
+const spendCents = computed(
+  () =>
+    (props.forecast.bucket_actuals.need ?? 0) + (props.forecast.bucket_actuals.want ?? 0),
+)
+
+const savedCents = computed(() => props.forecast.bucket_actuals.savings ?? 0)
+
+const incomeCents = computed(() => props.plan?.monthly_income_cents ?? 0)
+
+const savingsShare = computed(() => {
+  if (incomeCents.value <= 0) {
+    return '—'
+  }
+  return `${Math.round((savedCents.value * 100) / incomeCents.value)}%`
+})
+
+const segments = computed(() => [
+  { value: props.forecast.bucket_actuals.need ?? 0, color: 'var(--need)', label: 'Needs' },
+  { value: props.forecast.bucket_actuals.want ?? 0, color: 'var(--want)', label: 'Wants' },
+  {
+    value: props.forecast.bucket_actuals.savings ?? 0,
+    color: 'var(--savings)',
+    label: 'Savings',
+  },
+])
+
+const breakdownTitle = computed(
+  () =>
+    `Available cash ${formatDollars(props.forecast.breakdown.available_cash)}; remaining income ${formatDollars(props.forecast.breakdown.remaining_expected_income)}; essential bills ${formatDollars(props.forecast.breakdown.upcoming_essential_bills)}; remaining savings target ${formatDollars(props.forecast.breakdown.remaining_savings_target)}; safety buffer ${formatDollars(props.forecast.breakdown.safety_buffer)}`,
+)
 </script>
 
 <template>
-  <section class="hero">
+  <section class="hero panel">
     <div class="hero-copy">
-      <p class="label">Safe to spend</p>
-      <p class="amount">{{ formatDollars(props.forecast.amount) }}</p>
-      <p class="meta">
-        Through {{ props.forecast.effective_on }} · period {{ props.forecast.period }}
-      </p>
-      <button type="button" class="toggle" @click="expanded = !expanded">
-        {{ expanded ? 'Hide breakdown' : 'Show breakdown' }}
+      <div class="label-row">
+        <p class="label">Safe to spend</p>
+        <button
+          type="button"
+          class="info"
+          :title="breakdownTitle"
+          :aria-label="breakdownTitle"
+        >
+          <AppIcon name="info" :size="14" />
+        </button>
+      </div>
+      <p class="amount money">{{ formatDollars(forecast.amount) }}</p>
+      <button type="button" class="period" @click="expanded = !expanded">
+        this month
+        <AppIcon name="chevron-down" :size="14" />
       </button>
     </div>
+
+    <dl class="legend">
+      <div>
+        <dt><span class="dot income" aria-hidden="true" />Income</dt>
+        <dd class="money">{{ formatCents(incomeCents) }}</dd>
+      </div>
+      <div>
+        <dt><span class="dot spend" aria-hidden="true" />Spend</dt>
+        <dd class="money">{{ formatCents(spendCents) }}</dd>
+      </div>
+      <div>
+        <dt><span class="dot saved" aria-hidden="true" />Saved</dt>
+        <dd class="money">{{ formatCents(savedCents) }}</dd>
+      </div>
+    </dl>
+
+    <DonutChart
+      :segments="segments"
+      :center-value="savingsShare"
+      center-label="of income saved"
+      :size="150"
+      :thickness="14"
+    />
 
     <dl v-if="expanded" class="breakdown">
       <div>
         <dt>Available cash</dt>
-        <dd>{{ formatDollars(props.forecast.breakdown.available_cash) }}</dd>
+        <dd class="money">{{ formatDollars(forecast.breakdown.available_cash) }}</dd>
       </div>
       <div>
         <dt>Remaining income</dt>
-        <dd>+ {{ formatDollars(props.forecast.breakdown.remaining_expected_income) }}</dd>
+        <dd class="money">+ {{ formatDollars(forecast.breakdown.remaining_expected_income) }}</dd>
       </div>
       <div>
         <dt>Essential bills</dt>
-        <dd>− {{ formatDollars(props.forecast.breakdown.upcoming_essential_bills) }}</dd>
+        <dd class="money">− {{ formatDollars(forecast.breakdown.upcoming_essential_bills) }}</dd>
       </div>
       <div>
         <dt>Remaining savings target</dt>
-        <dd>− {{ formatDollars(props.forecast.breakdown.remaining_savings_target) }}</dd>
+        <dd class="money">− {{ formatDollars(forecast.breakdown.remaining_savings_target) }}</dd>
       </div>
       <div>
         <dt>Safety buffer</dt>
-        <dd>− {{ formatDollars(props.forecast.breakdown.safety_buffer) }}</dd>
+        <dd class="money">− {{ formatDollars(forecast.breakdown.safety_buffer) }}</dd>
       </div>
     </dl>
   </section>
@@ -50,68 +115,121 @@ const expanded = shallowRef(false)
 
 <style scoped>
 .hero {
-  display: grid;
-  gap: 1.25rem;
-  padding: 1.75rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  background:
-    linear-gradient(135deg, rgba(79, 140, 255, 0.14), transparent 45%),
-    linear-gradient(180deg, var(--bg-elevated), var(--bg-soft));
-  box-shadow: var(--shadow);
-  animation: rise 420ms ease both;
+  grid-template-columns: 1.1fr 0.9fr auto;
+  align-items: center;
+  gap: var(--space-6);
+  padding: var(--space-6);
 }
 
 .hero-copy {
   display: grid;
-  gap: 0.35rem;
+  gap: var(--space-2);
+}
+
+.label-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
 }
 
 .label {
   margin: 0;
   color: var(--text-muted);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  font-size: 0.78rem;
+  font-size: 0.8125rem;
+}
+
+.info {
+  display: grid;
+  place-items: center;
+  width: 1.35rem;
+  height: 1.35rem;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text-dim);
+  cursor: help;
 }
 
 .amount {
   margin: 0;
-  font-family: var(--font-display);
-  font-size: clamp(2.4rem, 5vw, 3.4rem);
+  color: var(--accent-text);
+  font-size: clamp(2.4rem, 4vw, 3rem);
   font-weight: 700;
   letter-spacing: -0.03em;
   line-height: 1.05;
 }
 
-.meta {
-  margin: 0;
-  color: var(--text-muted);
-}
-
-.toggle {
+.period {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
   justify-self: start;
-  margin-top: 0.5rem;
-  padding: 0.55rem 0.9rem;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-strong);
+  padding: 0.35rem 0.65rem;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
   background: transparent;
-  color: var(--text);
+  color: var(--text-muted);
+  font-size: 0.78rem;
   cursor: pointer;
 }
 
-.breakdown {
+.legend {
   display: grid;
-  gap: 0.65rem;
+  gap: var(--space-3);
   margin: 0;
-  padding-top: 0.5rem;
+}
+
+.legend div {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.legend dt {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+}
+
+.legend dd {
+  margin: 0;
+  font-weight: 600;
+}
+
+.dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: var(--radius-pill);
+}
+
+.dot.income {
+  background: var(--text-muted);
+}
+
+.dot.spend {
+  background: var(--need);
+}
+
+.dot.saved {
+  background: var(--savings);
+}
+
+.breakdown {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding-top: var(--space-4);
   border-top: 1px solid var(--border);
 }
 
 .breakdown div {
   display: flex;
   justify-content: space-between;
-  gap: 1rem;
+  gap: var(--space-4);
 }
 
 .breakdown dt {
@@ -120,17 +238,12 @@ const expanded = shallowRef(false)
 
 .breakdown dd {
   margin: 0;
-  font-variant-numeric: tabular-nums;
 }
 
-@keyframes rise {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
+@media (max-width: 1100px) {
+  .hero {
+    grid-template-columns: 1fr;
+    justify-items: start;
   }
 }
 </style>

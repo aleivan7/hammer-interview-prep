@@ -61,7 +61,7 @@ describe('ActivityView', () => {
 
     const editButton = wrapper
       .findAll('button')
-      .find((button) => button.text() === 'Edit')
+      .find((button) => button.text().includes('Edit'))
     expect(editButton).toBeDefined()
 
     await editButton!.trigger('click')

@@ -24,25 +24,27 @@ const rows = computed(() => {
 
 <template>
   <section class="panel">
-    <header>
-      <h2>50 / 30 / 20 plan</h2>
-      <p v-if="props.plan">
-        {{ props.plan.needs_percent }}/{{ props.plan.wants_percent }}/{{ props.plan.savings_percent }}
-        of {{ formatCents(props.plan.monthly_income_cents) }} monthly income
-      </p>
+    <header class="panel-header">
+      <div>
+        <h2>50 / 30 / 20 plan</h2>
+        <p v-if="plan">
+          {{ plan.needs_percent }}/{{ plan.wants_percent }}/{{ plan.savings_percent }} of
+          {{ formatCents(plan.monthly_income_cents) }} monthly income
+        </p>
+      </div>
     </header>
 
     <ul class="rows">
       <li v-for="row in rows" :key="row.bucket" :class="row.bucket">
         <div class="row-head">
           <span>{{ BUCKET_LABELS[row.bucket] }}</span>
-          <span
+          <span class="money"
             >{{ formatCents(row.actual) }} / {{ formatCents(row.target) }}
             <small>({{ row.pct }}%)</small></span
           >
         </div>
-        <div class="track" aria-hidden="true">
-          <div class="fill" :style="{ width: `${row.pct}%` }" />
+        <div class="meter" aria-hidden="true">
+          <div class="meter-fill fill" :style="{ width: `${row.pct}%` }" />
         </div>
       </li>
     </ul>
@@ -50,58 +52,24 @@ const rows = computed(() => {
 </template>
 
 <style scoped>
-.panel {
-  display: grid;
-  gap: 1rem;
-  padding: 1.25rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg-elevated);
-}
-
-header h2 {
-  margin: 0;
-  font-family: var(--font-display);
-  font-size: 1.25rem;
-}
-
-header p {
-  margin: 0.35rem 0 0;
-  color: var(--text-muted);
-  font-size: 0.92rem;
-}
-
 .rows {
   list-style: none;
   margin: 0;
   padding: 0;
   display: grid;
-  gap: 0.9rem;
+  gap: var(--space-4);
 }
 
 .row-head {
   display: flex;
   justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 0.35rem;
-  font-size: 0.92rem;
+  gap: var(--space-4);
+  margin-bottom: var(--space-2);
+  font-size: 0.875rem;
 }
 
 .row-head small {
   color: var(--text-dim);
-}
-
-.track {
-  height: 0.55rem;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.06);
-  overflow: hidden;
-}
-
-.fill {
-  height: 100%;
-  border-radius: inherit;
-  transition: width 360ms ease;
 }
 
 .need .fill {

@@ -4,6 +4,9 @@
 # Local Ralph worktrees and run logs
 .ralph/
 
+# Accidental root npm lockfile (real lockfile lives in frontend/)
+/package-lock.json
+
 # OS / editor
 .DS_Store
 *.log

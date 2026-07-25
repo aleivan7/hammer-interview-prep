@@ -2,6 +2,8 @@
 import { BUCKET_LABELS } from '../../types/bucket'
 import type { CategorizationRule } from '../../types/rule'
 import { formatCents } from '../../utils/money'
+import AppIcon from '../ui/AppIcon.vue'
+import BucketPill from '../ui/BucketPill.vue'
 
 defineProps<{
   rules: CategorizationRule[]
@@ -24,86 +26,120 @@ function amountLabel(rule: CategorizationRule): string {
 </script>
 
 <template>
-  <ul class="list">
-    <li v-for="rule in rules" :key="rule.id">
-      <div>
-        <strong>{{ rule.name }}</strong>
-        <p>
-          merchant contains “{{ rule.merchant_contains }}” ·
-          {{ BUCKET_LABELS[rule.target_bucket]
-          }}{{ rule.target_subcategory ? ` / ${rule.target_subcategory}` : '' }}
-        </p>
-        <p class="meta">
-          priority {{ rule.priority }} · {{ amountLabel(rule) }} ·
-          {{ rule.enabled ? 'enabled' : 'disabled' }} ·
-          {{ rule.auto_review ? 'auto-review' : 'suggest only' }}
-        </p>
-      </div>
-      <div class="actions">
-        <button type="button" @click="emit('edit', rule)">Edit</button>
-        <button type="button" class="danger" @click="emit('remove', rule)">Delete</button>
-      </div>
-    </li>
-  </ul>
+  <div class="panel list">
+    <ul class="panel-rows">
+      <li v-for="rule in rules" :key="rule.id" class="row">
+        <div class="copy">
+          <strong>{{ rule.name }}</strong>
+          <p>
+            merchant contains “{{ rule.merchant_contains }}” · {{ amountLabel(rule) }}
+          </p>
+        </div>
+
+        <div class="middle">
+          <BucketPill :bucket="rule.target_bucket" />
+          <span v-if="rule.target_subcategory" class="sub">{{ rule.target_subcategory }}</span>
+          <span class="sr-only">{{ BUCKET_LABELS[rule.target_bucket] }}</span>
+        </div>
+
+        <div class="meta">
+          <span class="pill">P{{ rule.priority }}</span>
+          <span class="pill" :class="{ 'pill-accent': rule.enabled }">
+            {{ rule.enabled ? 'Enabled' : 'Disabled' }}
+          </span>
+          <span class="hint">{{ rule.auto_review ? 'auto-review' : 'suggest only' }}</span>
+        </div>
+
+        <div class="actions">
+          <button
+            type="button"
+            class="btn btn-icon"
+            aria-label="Edit rule"
+            @click="emit('edit', rule)"
+          >
+            <AppIcon name="pencil" :size="16" />
+            <span class="sr-only">Edit</span>
+          </button>
+          <button
+            type="button"
+            class="btn btn-icon danger"
+            aria-label="Delete rule"
+            @click="emit('remove', rule)"
+          >
+            <AppIcon name="trash" :size="16" />
+            <span class="sr-only">Delete</span>
+          </button>
+        </div>
+      </li>
+    </ul>
+  </div>
 </template>
 
 <style scoped>
 .list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
+  gap: 0;
+  padding: 0 var(--space-4);
+}
+
+.row {
   display: grid;
-  gap: 0.75rem;
+  grid-template-columns: minmax(0, 1.4fr) auto minmax(0, 1fr) auto;
+  gap: var(--space-4);
+  align-items: center;
+  padding: var(--space-4) 0;
 }
 
-li {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 1rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg-elevated);
+.copy strong {
+  font-size: 0.875rem;
+  font-weight: 600;
 }
 
-strong {
-  font-size: 1.05rem;
-}
-
-p {
-  margin: 0.35rem 0 0;
+.copy p {
+  margin: 0.25rem 0 0;
   color: var(--text-muted);
-  font-size: 0.9rem;
+  font-size: 0.75rem;
+}
+
+.middle {
+  display: grid;
+  gap: 0.25rem;
+  justify-items: start;
+}
+
+.sub {
+  color: var(--text-dim);
+  font-size: 0.72rem;
 }
 
 .meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.hint {
   color: var(--text-dim);
-  font-size: 0.82rem;
+  font-size: 0.72rem;
 }
 
 .actions {
   display: flex;
-  gap: 0.5rem;
-  align-items: start;
-}
-
-button {
-  padding: 0.4rem 0.7rem;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-strong);
-  background: transparent;
-  color: var(--text);
-  cursor: pointer;
+  gap: var(--space-2);
 }
 
 .danger {
-  border-color: rgba(240, 113, 120, 0.45);
-  color: #ffb4b8;
+  color: #fca5a5;
 }
 
-@media (max-width: 700px) {
-  li {
-    flex-direction: column;
+@media (max-width: 900px) {
+  .row {
+    grid-template-columns: 1fr;
+    gap: var(--space-3);
+  }
+
+  .actions {
+    justify-content: end;
   }
 }
 </style>
