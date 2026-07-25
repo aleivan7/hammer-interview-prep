@@ -53,8 +53,8 @@ function onKeydown(event: KeyboardEvent): void {
 }
 
 watch(
-  () => [props.open, props.transaction] as const,
-  async ([open, transaction]) => {
+  () => props.open,
+  (open) => {
     if (!open) {
       document.body.style.overflow = ''
       window.removeEventListener('keydown', onKeydown)
@@ -62,7 +62,17 @@ watch(
     }
 
     document.body.style.overflow = 'hidden'
+    window.removeEventListener('keydown', onKeydown)
     window.addEventListener('keydown', onKeydown)
+  },
+)
+
+watch(
+  () => [props.open, props.transaction] as const,
+  async ([open, transaction]) => {
+    if (!open) {
+      return
+    }
 
     if (transaction) {
       form.merchant = transaction.merchant
