@@ -186,6 +186,86 @@ class TransactionApiTest extends TestCase
         ]);
     }
 
+    public function test_store_rejects_reviewed_transaction_without_bucket(): void
+    {
+        $this->postJson('/api/transactions', [
+            'merchant' => 'Corner Market',
+            'amount_cents' => 1250,
+            'kind' => 'expense',
+            'transaction_date' => '2026-07-22',
+            'reviewed' => true,
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['bucket']);
+    }
+
+    public function test_patch_persists_edits_when_transaction_remains_unreviewed(): void
+    {
+        $transaction = Transaction::factory()->unreviewed()->create([
+            'merchant' => 'Original Merchant',
+        ]);
+
+        $this->patchJson("/api/transactions/{$transaction->id}", [
+            'merchant' => 'Updated Merchant',
+            'reviewed' => false,
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.merchant', 'Updated Merchant')
+            ->assertJsonPath('data.reviewed', false);
+
+        $this->assertDatabaseHas('transactions', [
+            'id' => $transaction->id,
+            'merchant' => 'Updated Merchant',
+            'reviewed_at' => null,
+        ]);
+    }
+
+    public function test_patch_persists_edits_while_undoing_review(): void
+    {
+        $transaction = Transaction::factory()->reviewed()->create([
+            'merchant' => 'Original Merchant',
+            'bucket' => Bucket::Need,
+        ]);
+
+        $this->patchJson("/api/transactions/{$transaction->id}", [
+            'merchant' => 'Updated Merchant',
+            'reviewed' => false,
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.merchant', 'Updated Merchant')
+            ->assertJsonPath('data.reviewed', false);
+
+        $this->assertDatabaseHas('transactions', [
+            'id' => $transaction->id,
+            'merchant' => 'Updated Merchant',
+            'reviewed_at' => null,
+        ]);
+    }
+
+    public function test_patch_updates_an_already_reviewed_transaction(): void
+    {
+        $transaction = Transaction::factory()->reviewed()->create([
+            'merchant' => 'Original Merchant',
+            'bucket' => Bucket::Need,
+        ]);
+
+        $this->patchJson("/api/transactions/{$transaction->id}", [
+            'merchant' => 'Updated Merchant',
+            'bucket' => 'want',
+            'reviewed' => true,
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.merchant', 'Updated Merchant')
+            ->assertJsonPath('data.bucket', 'want')
+            ->assertJsonPath('data.reviewed', true);
+
+        $this->assertDatabaseHas('transactions', [
+            'id' => $transaction->id,
+            'merchant' => 'Updated Merchant',
+            'bucket' => 'want',
+        ]);
+    }
+
     public function test_patch_accepts_savings_bucket_and_debt_savings_alias(): void
     {
         $savings = Transaction::factory()->unreviewed()->create();

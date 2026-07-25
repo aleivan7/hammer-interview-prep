@@ -80,6 +80,7 @@ class TransactionController extends Controller
         Transaction $transaction,
     ): TransactionResource {
         $data = $request->validated();
+        $attributes = collect($data)->except(['reviewed', 'category'])->all();
 
         if (array_key_exists('reviewed', $data) && $data['reviewed'] === true) {
             $bucketValue = $data['bucket'] ?? $transaction->bucket?->value;
@@ -88,20 +89,31 @@ class TransactionController extends Controller
                 throw new UnprocessableEntityHttpException('A bucket is required to mark a transaction reviewed.');
             }
 
-            $transaction = $this->reviewService->review(
-                transaction: $transaction,
-                bucket: $bucketValue instanceof Bucket ? $bucketValue : Bucket::from($bucketValue),
-                subcategory: $data['subcategory'] ?? $transaction->subcategory,
-                source: ReviewSource::Manual,
-                confidence: 100,
-                explanation: 'Manually reviewed.',
-            );
+            if ($transaction->isReviewed()) {
+                $transaction->fill($attributes);
+                $transaction->save();
+            } else {
+                $transaction->fill(collect($attributes)->except(['bucket', 'subcategory'])->all());
+                $transaction->save();
+
+                $transaction = $this->reviewService->review(
+                    transaction: $transaction,
+                    bucket: $bucketValue instanceof Bucket ? $bucketValue : Bucket::from($bucketValue),
+                    subcategory: $data['subcategory'] ?? $transaction->subcategory,
+                    source: ReviewSource::Manual,
+                    confidence: 100,
+                    explanation: 'Manually reviewed.',
+                );
+            }
         } elseif (array_key_exists('reviewed', $data) && $data['reviewed'] === false) {
             if ($transaction->isReviewed()) {
                 $transaction = $this->reviewService->undo($transaction);
             }
+
+            $transaction->fill($attributes);
+            $transaction->save();
         } else {
-            $transaction->fill(collect($data)->except(['reviewed', 'category'])->all());
+            $transaction->fill($attributes);
             $transaction->save();
         }
 

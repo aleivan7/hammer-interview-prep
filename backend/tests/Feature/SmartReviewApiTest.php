@@ -89,6 +89,15 @@ class SmartReviewApiTest extends TestCase
         ]);
     }
 
+    public function test_smart_review_rejects_like_wildcards_in_batch_key(): void
+    {
+        foreach (['batch%', 'batch_key'] as $batchKey) {
+            $this->postJson('/api/smart-review', ['batch_key' => $batchKey])
+                ->assertUnprocessable()
+                ->assertJsonValidationErrors(['batch_key']);
+        }
+    }
+
     public function test_rule_precedence_lower_priority_wins(): void
     {
         CategorizationRule::factory()->create([

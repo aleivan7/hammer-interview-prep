@@ -73,4 +73,24 @@ class CategorizationRuleApiTest extends TestCase
         ])->assertStatus(422)
             ->assertJsonValidationErrors(['amount_cents_max']);
     }
+
+    public function test_patch_rejects_amount_max_below_existing_min(): void
+    {
+        $rule = CategorizationRule::factory()->create([
+            'amount_cents_min' => 5000,
+            'amount_cents_max' => 10_000,
+        ]);
+
+        $this->patchJson("/api/rules/{$rule->id}", [
+            'amount_cents_max' => 1000,
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['amount_cents_max']);
+
+        $this->assertDatabaseHas('categorization_rules', [
+            'id' => $rule->id,
+            'amount_cents_min' => 5000,
+            'amount_cents_max' => 10_000,
+        ]);
+    }
 }

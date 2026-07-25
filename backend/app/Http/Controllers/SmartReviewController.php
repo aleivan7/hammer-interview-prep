@@ -15,7 +15,13 @@ class SmartReviewController extends Controller
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'batch_key' => ['sometimes', 'nullable', 'string', 'max:100'],
+            'batch_key' => [
+                'sometimes',
+                'nullable',
+                'string',
+                'max:100',
+                'regex:/\A[A-Za-z0-9-]+\z/',
+            ],
         ]);
 
         $result = $this->smartReview->run($validated['batch_key'] ?? null);

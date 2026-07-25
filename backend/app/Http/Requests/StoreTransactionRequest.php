@@ -33,7 +33,11 @@ class StoreTransactionRequest extends FormRequest
             'merchant' => ['required', 'string', 'max:255'],
             'amount_cents' => ['required', 'integer', 'min:0', 'max:100000000'],
             'kind' => ['required', Rule::enum(TransactionKind::class)],
-            'bucket' => ['nullable', Rule::enum(Bucket::class)],
+            'bucket' => [
+                Rule::requiredIf(fn () => $this->boolean('reviewed')),
+                'nullable',
+                Rule::enum(Bucket::class),
+            ],
             'subcategory' => ['nullable', 'string', 'max:100'],
             'transaction_date' => ['required', 'date'],
             'account_id' => ['nullable', 'integer', 'exists:accounts,id'],
