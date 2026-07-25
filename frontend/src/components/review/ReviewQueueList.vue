@@ -9,14 +9,14 @@ import MerchantAvatar from '../ui/MerchantAvatar.vue'
 
 const props = defineProps<{
   transactions: Transaction[]
-  currentId: number | null
+  monthLabel: string
   selectedIds: number[]
   updating: boolean
 }>()
 
 const emit = defineEmits<{
   'update:selectedIds': [ids: number[]]
-  jump: [id: number]
+  focus: [id: number]
   categorizeSelected: [bucket: Bucket]
   clear: []
   categorizeOne: [id: number, bucket: Bucket]
@@ -86,8 +86,11 @@ function onRowBucket(id: number, event: Event): void {
   <section class="panel queue">
     <header class="panel-header">
       <div>
-        <h2>Multi-select</h2>
-        <p>Select multiple transactions to categorize at once.</p>
+        <h2>{{ monthLabel }}</h2>
+        <p>
+          {{ transactions.length }}
+          {{ transactions.length === 1 ? 'transaction' : 'transactions' }} awaiting review
+        </p>
       </div>
     </header>
 
@@ -107,7 +110,6 @@ function onRowBucket(id: number, event: Event): void {
         v-for="tx in filtered"
         :key="tx.id"
         class="row"
-        :class="{ current: tx.id === currentId }"
       >
         <input
           type="checkbox"
@@ -115,7 +117,13 @@ function onRowBucket(id: number, event: Event): void {
           :disabled="updating"
           @change="toggleOne(tx.id)"
         />
-        <button type="button" class="jump" @click="emit('jump', tx.id)">
+        <button
+          type="button"
+          class="focus-transaction"
+          :aria-label="`Open ${tx.merchant} in focus mode`"
+          :disabled="updating"
+          @click="emit('focus', tx.id)"
+        >
           <MerchantAvatar :name="tx.merchant" :size="36" />
           <div>
             <strong>{{ tx.merchant }}</strong>
@@ -207,7 +215,7 @@ function onRowBucket(id: number, event: Event): void {
 }
 
 .list {
-  max-height: 28rem;
+  max-height: 36rem;
   overflow: auto;
 }
 
@@ -219,12 +227,7 @@ function onRowBucket(id: number, event: Event): void {
   padding: var(--space-3) 0;
 }
 
-.row.current {
-  box-shadow: inset 2px 0 0 var(--accent);
-  padding-left: var(--space-2);
-}
-
-.jump {
+.focus-transaction {
   display: flex;
   gap: var(--space-3);
   align-items: center;
@@ -237,18 +240,23 @@ function onRowBucket(id: number, event: Event): void {
   cursor: pointer;
 }
 
-.jump div {
+.focus-transaction:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.focus-transaction div {
   display: grid;
   gap: 0.1rem;
   min-width: 0;
 }
 
-.jump strong {
+.focus-transaction strong {
   font-size: 0.8125rem;
   font-weight: 500;
 }
 
-.jump span {
+.focus-transaction span {
   color: var(--text-muted);
   font-size: 0.72rem;
 }
@@ -296,5 +304,15 @@ function onRowBucket(id: number, event: Event): void {
 .savings-btn {
   background: var(--savings);
   color: var(--accent-ink);
+}
+
+@media (max-width: 640px) {
+  .row {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .bucket {
+    grid-column: 2 / -1;
+  }
 }
 </style>

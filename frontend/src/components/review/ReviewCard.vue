@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { watch } from 'vue'
 import { BUCKET_LABELS, type Bucket } from '../../types/bucket'
 import type { Transaction, TransactionSuggestion } from '../../types/transaction'
 import { formatDate } from '../../utils/money'
@@ -14,27 +15,60 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   categorize: [bucket: Bucket]
+  exitStart: []
 }>()
 
-const { hint, cardStyle, onPointerDown, onPointerMove, onPointerUp, onPointerCancel } =
-  useCardSwipe((bucket) => {
-    if (!props.updating) {
-      emit('categorize', bucket)
-    }
-  })
+const {
+  hint,
+  cardStyle,
+  exiting,
+  onPointerDown,
+  onPointerMove,
+  onPointerUp,
+  onPointerCancel,
+  beginExit,
+  reset,
+} = useCardSwipe((bucket) => {
+  if (props.updating) {
+    return false
+  }
+
+  emit('categorize', bucket)
+  return true
+})
+
+watch(exiting, (isExiting) => {
+  if (isExiting) {
+    emit('exitStart')
+  }
+})
+
+async function exitThenCategorize(bucket: Bucket): Promise<void> {
+  if (props.updating || exiting.value) {
+    return
+  }
+
+  await beginExit(bucket)
+}
 
 function onSelectChange(event: Event): void {
   const value = (event.target as HTMLSelectElement).value as Bucket | ''
   if (value) {
-    emit('categorize', value)
+    void exitThenCategorize(value)
   }
 }
+
+defineExpose({
+  beginExit: exitThenCategorize,
+  reset,
+  exiting,
+})
 </script>
 
 <template>
   <article
     class="card"
-    :class="{ disabled: updating, hint: hint ?? undefined }"
+    :class="{ disabled: updating || exiting, hint: hint ?? undefined }"
     :style="cardStyle"
     :data-hint="hint ?? undefined"
     @pointerdown="onPointerDown"
@@ -55,7 +89,7 @@ function onSelectChange(event: Event): void {
       <span class="sr-only">Category</span>
       <select
         :value="suggestion?.bucket ?? ''"
-        :disabled="updating"
+        :disabled="updating || exiting"
         @change="onSelectChange"
         @pointerdown.stop
       >
@@ -66,13 +100,16 @@ function onSelectChange(event: Event): void {
       </select>
     </label>
 
-    <div v-if="suggestion" class="suggestion">
-      <p>
-        Suggestion:
-        <strong>{{ suggestion.bucket ? BUCKET_LABELS[suggestion.bucket] : 'None' }}</strong>
-        · {{ suggestion.confidence }}% · {{ suggestion.source }}
-      </p>
-      <p class="explain">{{ suggestion.explanation }}</p>
+    <div class="suggestion" :class="{ empty: !suggestion }">
+      <template v-if="suggestion">
+        <p>
+          Suggestion:
+          <strong>{{ suggestion.bucket ? BUCKET_LABELS[suggestion.bucket] : 'None' }}</strong>
+          · {{ suggestion.confidence }}% · {{ suggestion.source }}
+        </p>
+        <p class="explain">{{ suggestion.explanation }}</p>
+      </template>
+      <p v-else class="explain">Looking for a suggestion…</p>
     </div>
   </article>
 </template>
@@ -92,6 +129,7 @@ function onSelectChange(event: Event): void {
   box-shadow: var(--shadow-panel);
   cursor: grab;
   text-align: center;
+  will-change: transform, opacity;
 }
 
 .card:active {
@@ -155,11 +193,17 @@ h2 {
 
 .suggestion {
   width: 100%;
+  min-height: 4.25rem;
   padding: var(--space-3);
   border-radius: var(--radius-sm);
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid var(--border);
   text-align: left;
+}
+
+.suggestion.empty {
+  display: grid;
+  align-content: center;
 }
 
 .suggestion p {
