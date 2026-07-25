@@ -1,16 +1,25 @@
 <script setup lang="ts">
-import { onMounted, shallowRef } from 'vue'
+import { computed, onMounted, shallowRef } from 'vue'
+import { RouterLink } from 'vue-router'
 import { fetchDashboard } from '../api/dashboardApi'
 import AccountsHealth from '../components/overview/AccountsHealth.vue'
 import BucketProgress from '../components/overview/BucketProgress.vue'
 import CashFlowList from '../components/overview/CashFlowList.vue'
 import RecentTransactions from '../components/overview/RecentTransactions.vue'
 import SafeToSpendHero from '../components/overview/SafeToSpendHero.vue'
+import AppIcon, { type IconName } from '../components/ui/AppIcon.vue'
+import EmptyState from '../components/ui/EmptyState.vue'
+import PageHeader from '../components/ui/PageHeader.vue'
+import SkeletonBlock from '../components/ui/SkeletonBlock.vue'
+import StatCard from '../components/ui/StatCard.vue'
 import type { DashboardData } from '../types/dashboard'
+import { BUCKET_LABELS, type Bucket } from '../types/bucket'
+import { formatCents } from '../utils/money'
 
 const dashboard = shallowRef<DashboardData | null>(null)
 const loading = shallowRef(true)
 const error = shallowRef<string | null>(null)
+const dismissedAlerts = shallowRef<Set<number>>(new Set())
 
 async function load(): Promise<void> {
   loading.value = true
@@ -18,6 +27,7 @@ async function load(): Promise<void> {
 
   try {
     dashboard.value = await fetchDashboard()
+    dismissedAlerts.value = new Set()
   } catch (err) {
     dashboard.value = null
     error.value = err instanceof Error ? err.message : 'Failed to load dashboard.'
@@ -26,6 +36,104 @@ async function load(): Promise<void> {
   }
 }
 
+function greetingFor(name: string): string {
+  const hour = new Date().getHours()
+  const first = name.split(/\s+/)[0] || name
+  if (hour < 12) {
+    return `Good morning, ${first}`
+  }
+  if (hour < 18) {
+    return `Good afternoon, ${first}`
+  }
+  return `Good evening, ${first}`
+}
+
+const alerts = computed(() => {
+  const list = dashboard.value?.safe_to_spend.unusual_alerts ?? []
+  return list
+    .map((alert, index) => ({ ...alert, index }))
+    .filter((alert) => !dismissedAlerts.value.has(alert.index))
+})
+
+const glance = computed(() => {
+  const data = dashboard.value
+  if (!data) {
+    return null
+  }
+
+  const need = data.safe_to_spend.bucket_actuals.need ?? 0
+  const want = data.safe_to_spend.bucket_actuals.want ?? 0
+  const savings = data.safe_to_spend.bucket_actuals.savings ?? 0
+  const spend = need + want
+  const planSpend =
+    (data.safe_to_spend.bucket_targets.need ?? 0) + (data.safe_to_spend.bucket_targets.want ?? 0)
+  const spendPct = planSpend > 0 ? Math.round((spend * 100) / planSpend) : 0
+
+  const buckets: Bucket[] = ['need', 'want', 'savings']
+  const top = buckets
+    .map((bucket) => ({ bucket, cents: data.safe_to_spend.bucket_actuals[bucket] ?? 0 }))
+    .sort((a, b) => b.cents - a.cents)[0]
+  const totalBucket = need + want + savings
+  const topPct = totalBucket > 0 ? Math.round((top.cents * 100) / totalBucket) : 0
+
+  const income = data.cash_flows
+    .filter((flow) => flow.kind === 'income')
+    .reduce((sum, flow) => sum + flow.amount_cents, 0)
+  const bills = data.cash_flows
+    .filter((flow) => flow.kind === 'bill')
+    .reduce((sum, flow) => sum + flow.amount_cents, 0)
+
+  return {
+    spend,
+    spendPct,
+    topLabel: BUCKET_LABELS[top.bucket],
+    topCents: top.cents,
+    topPct,
+    netPlanned: income - bills,
+  }
+})
+
+function dismissAlert(index: number): void {
+  const next = new Set(dismissedAlerts.value)
+  next.add(index)
+  dismissedAlerts.value = next
+}
+
+const quickActions: Array<{
+  to: string
+  title: string
+  body: string
+  icon: IconName
+  tone: 'accent' | 'need' | 'want'
+  description: (count: number) => string
+}> = [
+  {
+    to: '/activity',
+    title: 'View Activity',
+    body: 'See your recent transactions.',
+    icon: 'list',
+    tone: 'need',
+    description: () => 'See your recent transactions.',
+  },
+  {
+    to: '/review',
+    title: 'Review',
+    body: 'Categorize waiting transactions.',
+    icon: 'review',
+    tone: 'accent',
+    description: (count) =>
+      count > 0 ? `Categorize ${count} waiting.` : 'Nothing waiting to categorize.',
+  },
+  {
+    to: '/rules',
+    title: 'Manage Rules',
+    body: 'Automate categorization.',
+    icon: 'target',
+    tone: 'want',
+    description: () => 'Automate categorization.',
+  },
+]
+
 onMounted(() => {
   void load()
 })
@@ -33,36 +141,123 @@ onMounted(() => {
 
 <template>
   <div class="overview">
-    <p v-if="loading" class="status" role="status">Loading overview…</p>
+    <p v-if="loading" class="sr-only" role="status">Loading overview…</p>
 
-    <div v-else-if="error" class="panel error" role="alert">
-      <p>{{ error }}</p>
-      <button type="button" @click="load">Try again</button>
-    </div>
+    <template v-if="loading">
+      <SkeletonBlock height="2.5rem" width="18rem" />
+      <SkeletonBlock height="12rem" radius="var(--radius)" />
+      <div class="skeleton-row">
+        <SkeletonBlock height="6rem" radius="var(--radius)" />
+        <SkeletonBlock height="6rem" radius="var(--radius)" />
+        <SkeletonBlock height="6rem" radius="var(--radius)" />
+      </div>
+    </template>
 
-    <template v-else-if="dashboard">
-      <div class="intro">
-        <p>
-          Welcome back, {{ dashboard.persona.name }}. Laravel owns the totals — this view only
-          presents them.
-        </p>
-        <RouterLink v-if="dashboard.unreviewed_count > 0" class="cta" to="/review">
-          Review {{ dashboard.unreviewed_count }} waiting
+    <EmptyState
+      v-else-if="error"
+      icon="alert"
+      title="Couldn’t load overview"
+      :body="error"
+    >
+      <button type="button" class="btn btn-primary" @click="load">Try again</button>
+    </EmptyState>
+
+    <template v-else-if="dashboard && glance">
+      <PageHeader
+        :title="`${greetingFor(dashboard.persona.name)}`"
+        subtitle="Here's your financial overview."
+      >
+        <template #actions>
+          <RouterLink class="btn btn-ghost" to="/activity?new=1">Add transaction</RouterLink>
+          <RouterLink
+            v-if="dashboard.unreviewed_count > 0"
+            class="btn btn-primary"
+            to="/review"
+          >
+            Review {{ dashboard.unreviewed_count }} waiting
+          </RouterLink>
+          <RouterLink v-else class="btn btn-primary" to="/activity">View activity</RouterLink>
+        </template>
+      </PageHeader>
+
+      <SafeToSpendHero :forecast="dashboard.safe_to_spend" :plan="dashboard.plan" />
+
+      <div v-if="alerts.length" class="alerts">
+        <article v-for="alert in alerts" :key="alert.index" class="alert panel">
+          <div class="alert-icon">
+            <AppIcon name="alert" :size="18" />
+          </div>
+          <div class="alert-copy">
+            <h3>Unusual purchase</h3>
+            <p>{{ alert.message }}</p>
+            <RouterLink class="btn btn-ghost" to="/review">Review transaction</RouterLink>
+          </div>
+          <button
+            type="button"
+            class="btn btn-icon"
+            aria-label="Dismiss alert"
+            @click="dismissAlert(alert.index)"
+          >
+            <AppIcon name="close" :size="16" />
+          </button>
+        </article>
+      </div>
+
+      <div class="quick">
+        <RouterLink
+          v-for="action in quickActions"
+          :key="action.to"
+          :to="action.to"
+          class="quick-card"
+          :data-tone="action.tone"
+        >
+          <span class="quick-icon">
+            <AppIcon :name="action.icon" :size="18" />
+          </span>
+          <div>
+            <strong>{{ action.title }}</strong>
+            <p>{{ action.description(dashboard.unreviewed_count) }}</p>
+          </div>
+          <AppIcon name="chevron-right" :size="16" />
         </RouterLink>
       </div>
 
-      <SafeToSpendHero :forecast="dashboard.safe_to_spend" />
+      <div class="bottom">
+        <div class="left-col">
+          <section class="panel glance">
+            <header class="panel-header">
+              <h2>At a glance</h2>
+            </header>
+            <div class="panel-rows">
+              <StatCard
+                label="Monthly spend so far"
+                :value="formatCents(glance.spend)"
+                :context="`${glance.spendPct}% of plan`"
+                icon="trending"
+                tone="need"
+              />
+              <StatCard
+                label="Top spending category"
+                :value="glance.topLabel"
+                :context="`${formatCents(glance.topCents)} · ${glance.topPct}% of spend`"
+                icon="star"
+                tone="want"
+              />
+              <StatCard
+                label="Net planned cash flow"
+                :value="formatCents(glance.netPlanned)"
+                context="Planned income minus essential bills"
+                icon="bank"
+                tone="accent"
+              />
+            </div>
+          </section>
 
-      <ul v-if="dashboard.safe_to_spend.unusual_alerts.length" class="alerts">
-        <li v-for="(alert, index) in dashboard.safe_to_spend.unusual_alerts" :key="index">
-          {{ alert.message }}
-        </li>
-      </ul>
+          <BucketProgress :forecast="dashboard.safe_to_spend" :plan="dashboard.plan" />
+          <CashFlowList :cash-flows="dashboard.cash_flows" />
+          <AccountsHealth :accounts="dashboard.accounts" />
+        </div>
 
-      <div class="grid">
-        <BucketProgress :forecast="dashboard.safe_to_spend" :plan="dashboard.plan" />
-        <CashFlowList :cash-flows="dashboard.cash_flows" />
-        <AccountsHealth :accounts="dashboard.accounts" />
         <RecentTransactions :transactions="dashboard.recent_transactions" />
       </div>
     </template>
@@ -72,83 +267,140 @@ onMounted(() => {
 <style scoped>
 .overview {
   display: grid;
-  gap: 1.25rem;
-  max-width: 72rem;
+  gap: var(--space-5);
 }
 
-.intro {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 1rem;
-  align-items: center;
-}
-
-.intro p {
-  margin: 0;
-  color: var(--text-muted);
-  max-width: 40rem;
-}
-
-.cta {
-  padding: 0.65rem 1rem;
-  border-radius: var(--radius-sm);
-  background: var(--need);
-  color: #071018;
-  font-weight: 600;
-  transition: transform 160ms ease;
-}
-
-.cta:hover {
-  transform: translateY(-1px);
+.skeleton-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-4);
 }
 
 .alerts {
-  list-style: none;
-  margin: 0;
-  padding: 0;
   display: grid;
-  gap: 0.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+  gap: var(--space-4);
 }
 
-.alerts li {
-  padding: 0.75rem 1rem;
-  border-radius: var(--radius-sm);
-  border: 1px solid rgba(240, 193, 75, 0.35);
-  background: var(--want-soft);
-  color: #ffe7a1;
+.alert {
+  grid-template-columns: auto 1fr auto;
+  align-items: start;
+  gap: var(--space-3);
 }
 
-.grid {
+.alert-icon {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 1rem;
-}
-
-.status,
-.panel {
-  margin: 0;
-}
-
-.panel.error {
-  padding: 1rem;
-  border-radius: var(--radius);
-  border: 1px solid rgba(240, 113, 120, 0.4);
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: var(--radius-pill);
   background: var(--danger-soft);
+  color: #fca5a5;
 }
 
-.panel.error button {
-  margin-top: 0.75rem;
-  padding: 0.55rem 0.9rem;
+.alert-copy {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.alert-copy h3 {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.alert-copy p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+}
+
+.alert-copy .btn {
+  justify-self: start;
+}
+
+.quick {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+.quick-card {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: var(--space-3);
+  align-items: center;
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  transition:
+    border-color 160ms ease,
+    transform 160ms ease;
+}
+
+.quick-card:hover {
+  border-color: var(--border-strong);
+  transform: translateY(-1px);
+}
+
+.quick-icon {
+  display: grid;
+  place-items: center;
+  width: 3rem;
+  height: 3rem;
   border-radius: var(--radius-sm);
-  border: 1px solid var(--border-strong);
-  background: transparent;
-  color: var(--text);
-  cursor: pointer;
+  background: var(--bg-soft);
+  color: var(--text-muted);
 }
 
-@media (max-width: 900px) {
-  .grid {
+.quick-card[data-tone='need'] .quick-icon {
+  background: var(--need-soft);
+  color: #93c5fd;
+}
+
+.quick-card[data-tone='accent'] .quick-icon {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+
+.quick-card[data-tone='want'] .quick-icon {
+  background: var(--want-soft);
+  color: #fcd34d;
+}
+
+.quick-card strong {
+  display: block;
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.quick-card p {
+  margin: 0.2rem 0 0;
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+}
+
+.bottom {
+  display: grid;
+  grid-template-columns: 1fr 1.15fr;
+  gap: var(--space-5);
+  align-items: start;
+}
+
+.left-col {
+  display: grid;
+  gap: var(--space-5);
+}
+
+.glance {
+  gap: 0;
+}
+
+@media (max-width: 1100px) {
+  .bottom,
+  .quick,
+  .skeleton-row {
     grid-template-columns: 1fr;
   }
 }

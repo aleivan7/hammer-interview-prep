@@ -9,18 +9,20 @@ defineProps<{
 
 <template>
   <section class="panel">
-    <header>
-      <h2>Cash flows</h2>
-      <p>Upcoming income and essential bills</p>
+    <header class="panel-header">
+      <div>
+        <h2>Cash flows</h2>
+        <p>Upcoming income and essential bills</p>
+      </div>
     </header>
 
-    <ul v-if="cashFlows.length">
-      <li v-for="flow in cashFlows" :key="flow.id">
+    <ul v-if="cashFlows.length" class="panel-rows">
+      <li v-for="flow in cashFlows" :key="flow.id" class="row">
         <div>
           <strong>{{ flow.name }}</strong>
           <span>{{ formatShortDate(flow.due_on) }} · {{ flow.kind }}</span>
         </div>
-        <span class="amount" :data-kind="flow.kind">{{ formatDollars(flow.amount) }}</span>
+        <span class="amount money" :data-kind="flow.kind">{{ formatDollars(flow.amount) }}</span>
       </li>
     </ul>
     <p v-else class="empty">No planned cash flows this period.</p>
@@ -28,62 +30,45 @@ defineProps<{
 </template>
 
 <style scoped>
-.panel {
-  display: grid;
-  gap: 1rem;
-  padding: 1.25rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg-elevated);
-}
-
-header h2 {
-  margin: 0;
-  font-family: var(--font-display);
-  font-size: 1.25rem;
-}
-
-header p,
-.empty {
-  margin: 0.35rem 0 0;
-  color: var(--text-muted);
-  font-size: 0.92rem;
-}
-
-ul {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 0.75rem;
-}
-
-li {
+.row {
   display: flex;
   justify-content: space-between;
-  gap: 1rem;
+  gap: var(--space-4);
+  padding: var(--space-3) 0;
 }
 
-li div {
+.row div {
   display: grid;
   gap: 0.15rem;
 }
 
-li span {
+.row strong {
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.row span {
   color: var(--text-muted);
-  font-size: 0.85rem;
+  font-size: 0.75rem;
 }
 
 .amount {
   color: var(--text);
-  font-variant-numeric: tabular-nums;
+  font-size: 0.875rem;
+  font-weight: 600;
 }
 
 .amount[data-kind='income'] {
-  color: var(--savings);
+  color: var(--accent-text);
 }
 
 .amount[data-kind='bill'] {
-  color: var(--want);
+  color: #fcd34d;
+}
+
+.empty {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.875rem;
 }
 </style>

@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, reactive, watch } from 'vue'
+import { computed, nextTick, onUnmounted, reactive, useTemplateRef, watch } from 'vue'
 import type { Account } from '../../types/account'
 import type { Bucket, TransactionKind } from '../../types/bucket'
 import type { Transaction } from '../../types/transaction'
 import { dollarsInputToCents } from '../../utils/money'
+import AppIcon from '../ui/AppIcon.vue'
 
 const props = defineProps<{
   open: boolean
@@ -29,6 +30,8 @@ const emit = defineEmits<{
   ]
 }>()
 
+const merchantInput = useTemplateRef<HTMLInputElement>('merchantInput')
+
 const form = reactive({
   merchant: '',
   amount: '',
@@ -43,12 +46,23 @@ const form = reactive({
 
 const title = computed(() => (props.transaction ? 'Edit transaction' : 'New transaction'))
 
+function onKeydown(event: KeyboardEvent): void {
+  if (event.key === 'Escape') {
+    emit('close')
+  }
+}
+
 watch(
   () => [props.open, props.transaction] as const,
-  ([open, transaction]) => {
+  async ([open, transaction]) => {
     if (!open) {
+      document.body.style.overflow = ''
+      window.removeEventListener('keydown', onKeydown)
       return
     }
+
+    document.body.style.overflow = 'hidden'
+    window.addEventListener('keydown', onKeydown)
 
     if (transaction) {
       form.merchant = transaction.merchant
@@ -71,8 +85,16 @@ watch(
       form.notes = ''
       form.reviewed = false
     }
+
+    await nextTick()
+    merchantInput.value?.focus()
   },
 )
+
+onUnmounted(() => {
+  document.body.style.overflow = ''
+  window.removeEventListener('keydown', onKeydown)
+})
 
 function onSubmit(): void {
   const cents = dollarsInputToCents(form.amount)
@@ -96,33 +118,57 @@ function onSubmit(): void {
 </script>
 
 <template>
-  <div v-if="open" class="backdrop" @click.self="emit('close')">
-    <form class="dialog" @submit.prevent="onSubmit">
+  <div
+    v-if="open"
+    class="backdrop"
+    @click.self="emit('close')"
+  >
+    <form
+      class="dialog"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="tx-dialog-title"
+      @submit.prevent="onSubmit"
+    >
       <header>
-        <h2>{{ title }}</h2>
-        <button type="button" class="ghost" @click="emit('close')">Close</button>
+        <h2 id="tx-dialog-title">{{ title }}</h2>
+        <button type="button" class="btn btn-icon" aria-label="Close" @click="emit('close')">
+          <AppIcon name="close" :size="16" />
+        </button>
       </header>
 
       <label>
         Merchant
-        <input v-model="form.merchant" required maxlength="255" />
+        <input
+          ref="merchantInput"
+          v-model="form.merchant"
+          class="field"
+          required
+          maxlength="255"
+        />
       </label>
 
       <div class="row">
         <label>
           Amount
-          <input v-model="form.amount" required inputmode="decimal" placeholder="12.50" />
+          <input
+            v-model="form.amount"
+            class="field"
+            required
+            inputmode="decimal"
+            placeholder="12.50"
+          />
         </label>
         <label>
           Date
-          <input v-model="form.transaction_date" required type="date" />
+          <input v-model="form.transaction_date" class="field" required type="date" />
         </label>
       </div>
 
       <div class="row">
         <label>
           Kind
-          <select v-model="form.kind">
+          <select v-model="form.kind" class="field">
             <option value="expense">Expense</option>
             <option value="income">Income</option>
             <option value="transfer">Transfer</option>
@@ -131,7 +177,7 @@ function onSubmit(): void {
         </label>
         <label>
           Account
-          <select v-model="form.account_id">
+          <select v-model="form.account_id" class="field">
             <option value="">None</option>
             <option v-for="account in accounts" :key="account.id" :value="String(account.id)">
               {{ account.name }}
@@ -143,7 +189,7 @@ function onSubmit(): void {
       <div class="row">
         <label>
           Bucket
-          <select v-model="form.bucket">
+          <select v-model="form.bucket" class="field">
             <option value="">Uncategorized</option>
             <option value="need">Needs</option>
             <option value="want">Wants</option>
@@ -152,13 +198,13 @@ function onSubmit(): void {
         </label>
         <label>
           Subcategory
-          <input v-model="form.subcategory" maxlength="100" />
+          <input v-model="form.subcategory" class="field" maxlength="100" />
         </label>
       </div>
 
       <label>
         Notes
-        <textarea v-model="form.notes" rows="3" maxlength="1000" />
+        <textarea v-model="form.notes" class="field" rows="3" maxlength="1000" />
       </label>
 
       <label class="check">
@@ -167,8 +213,8 @@ function onSubmit(): void {
       </label>
 
       <footer>
-        <button type="button" class="ghost" @click="emit('close')">Cancel</button>
-        <button type="submit" :disabled="saving">
+        <button type="button" class="btn btn-ghost" @click="emit('close')">Cancel</button>
+        <button type="submit" class="btn btn-primary" :disabled="saving">
           {{ saving ? 'Saving…' : 'Save' }}
         </button>
       </footer>
@@ -183,20 +229,20 @@ function onSubmit(): void {
   z-index: 20;
   display: grid;
   place-items: center;
-  padding: 1rem;
-  background: rgba(4, 8, 16, 0.72);
-  backdrop-filter: blur(4px);
+  padding: var(--space-4);
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(6px);
 }
 
 .dialog {
   width: min(100%, 34rem);
   display: grid;
-  gap: 0.85rem;
-  padding: 1.25rem;
-  border-radius: var(--radius);
+  gap: var(--space-3);
+  padding: var(--space-5);
+  border-radius: var(--radius-lg);
   border: 1px solid var(--border);
   background: var(--bg-elevated);
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow-modal);
 }
 
 header,
@@ -204,13 +250,13 @@ footer,
 .row {
   display: flex;
   justify-content: space-between;
-  gap: 0.75rem;
+  gap: var(--space-3);
 }
 
 header h2 {
   margin: 0;
-  font-family: var(--font-display);
-  font-size: 1.3rem;
+  font-size: 1.25rem;
+  font-weight: 600;
 }
 
 .row > label {
@@ -221,7 +267,7 @@ label {
   display: grid;
   gap: 0.3rem;
   color: var(--text-muted);
-  font-size: 0.85rem;
+  font-size: 0.8125rem;
 }
 
 .check {
@@ -230,36 +276,12 @@ label {
   color: var(--text);
 }
 
-input,
-select,
-textarea {
-  width: 100%;
-  padding: 0.55rem 0.7rem;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
-  background: var(--bg-soft);
-  color: var(--text);
+textarea.field {
+  min-height: 5rem;
+  resize: vertical;
 }
 
-button {
-  padding: 0.55rem 0.9rem;
-  border-radius: var(--radius-sm);
-  border: 1px solid transparent;
-  background: var(--need);
-  color: #071018;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.ghost {
-  background: transparent;
-  border-color: var(--border-strong);
-  color: var(--text);
-  font-weight: 500;
+footer {
+  justify-content: end;
 }
 </style>

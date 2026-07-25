@@ -4,6 +4,9 @@ import { fetchAccounts } from '../api/accountApi'
 import { createRule, deleteRule, fetchRules, updateRule } from '../api/rulesApi'
 import RuleForm from '../components/rules/RuleForm.vue'
 import RuleList from '../components/rules/RuleList.vue'
+import AppIcon from '../components/ui/AppIcon.vue'
+import EmptyState from '../components/ui/EmptyState.vue'
+import PageHeader from '../components/ui/PageHeader.vue'
 import type { Account } from '../types/account'
 import type { CategorizationRule } from '../types/rule'
 
@@ -98,13 +101,17 @@ onMounted(async () => {
 
 <template>
   <div class="rules">
-    <div class="toolbar">
-      <p>
-        Practical merchant rules run before heuristics during Smart Review. Lower priority numbers
-        win.
-      </p>
-      <button type="button" class="primary" @click="openCreate">New rule</button>
-    </div>
+    <PageHeader
+      title="Rules"
+      subtitle="Merchant rules run before heuristics during Smart Review. Lower priority numbers win."
+    >
+      <template #actions>
+        <button type="button" class="btn btn-primary" @click="openCreate">
+          <AppIcon name="plus" :size="16" />
+          New rule
+        </button>
+      </template>
+    </PageHeader>
 
     <p v-if="loading" class="status" role="status">Loading rules…</p>
     <p v-else-if="error" class="error" role="alert">{{ error }}</p>
@@ -119,58 +126,35 @@ onMounted(async () => {
     />
 
     <RuleList
-      v-if="!loading && !showForm"
+      v-if="!loading && !showForm && rules.length"
       :rules="rules"
       @edit="openEdit"
       @remove="handleRemove"
     />
 
-    <p v-if="!loading && !showForm && !rules.length" class="empty">No rules yet.</p>
+    <EmptyState
+      v-if="!loading && !showForm && !rules.length"
+      icon="tag"
+      title="No rules yet"
+      body="Create a merchant rule to auto-categorize matching transactions."
+    >
+      <button type="button" class="btn btn-primary" @click="openCreate">New rule</button>
+    </EmptyState>
   </div>
 </template>
 
 <style scoped>
 .rules {
   display: grid;
-  gap: 1rem;
-  max-width: 56rem;
-}
-
-.toolbar {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  align-items: start;
-}
-
-.toolbar p {
-  margin: 0;
-  color: var(--text-muted);
-  max-width: 36rem;
-}
-
-.primary {
-  padding: 0.6rem 1rem;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: var(--need);
-  color: #071018;
-  font-weight: 600;
-  cursor: pointer;
-  white-space: nowrap;
+  gap: var(--space-5);
 }
 
 .status,
-.error,
-.empty {
+.error {
   margin: 0;
 }
 
 .error {
   color: var(--danger);
-}
-
-.empty {
-  color: var(--text-muted);
 }
 </style>

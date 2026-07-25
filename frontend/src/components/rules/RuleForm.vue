@@ -102,26 +102,26 @@ function onSubmit(): void {
 </script>
 
 <template>
-  <form class="form" @submit.prevent="onSubmit">
-    <header>
+  <form class="form panel" @submit.prevent="onSubmit">
+    <header class="panel-header">
       <h2>{{ rule ? 'Edit rule' : 'New rule' }}</h2>
-      <button type="button" class="ghost" @click="emit('cancel')">Close</button>
+      <button type="button" class="btn btn-ghost" @click="emit('cancel')">Close</button>
     </header>
 
     <label>
       Name
-      <input v-model="form.name" required maxlength="120" />
+      <input v-model="form.name" class="field" required maxlength="120" />
     </label>
 
     <label>
       Merchant contains
-      <input v-model="form.merchant_contains" required maxlength="120" />
+      <input v-model="form.merchant_contains" class="field" required maxlength="120" />
     </label>
 
     <div class="row">
       <label>
         Account (optional)
-        <select v-model="form.account_id">
+        <select v-model="form.account_id" class="field">
           <option value="">Any account</option>
           <option v-for="account in accounts" :key="account.id" :value="String(account.id)">
             {{ account.name }}
@@ -130,7 +130,7 @@ function onSubmit(): void {
       </label>
       <label>
         Target bucket
-        <select v-model="form.target_bucket">
+        <select v-model="form.target_bucket" class="field">
           <option value="need">Needs</option>
           <option value="want">Wants</option>
           <option value="savings">Savings</option>
@@ -141,22 +141,29 @@ function onSubmit(): void {
     <div class="row">
       <label>
         Min amount
-        <input v-model="form.amount_min" inputmode="decimal" placeholder="optional" />
+        <input v-model="form.amount_min" class="field" inputmode="decimal" placeholder="optional" />
       </label>
       <label>
         Max amount
-        <input v-model="form.amount_max" inputmode="decimal" placeholder="optional" />
+        <input v-model="form.amount_max" class="field" inputmode="decimal" placeholder="optional" />
       </label>
     </div>
 
     <div class="row">
       <label>
         Subcategory
-        <input v-model="form.target_subcategory" maxlength="100" />
+        <input v-model="form.target_subcategory" class="field" maxlength="100" />
       </label>
       <label>
         Priority
-        <input v-model.number="form.priority" type="number" min="1" max="1000" required />
+        <input
+          v-model.number="form.priority"
+          class="field"
+          type="number"
+          min="1"
+          max="1000"
+          required
+        />
       </label>
     </div>
 
@@ -170,20 +177,17 @@ function onSubmit(): void {
     </label>
 
     <footer>
-      <button type="button" class="ghost" @click="emit('cancel')">Cancel</button>
-      <button type="submit" :disabled="saving">{{ saving ? 'Saving…' : 'Save rule' }}</button>
+      <button type="button" class="btn btn-ghost" @click="emit('cancel')">Cancel</button>
+      <button type="submit" class="btn btn-primary" :disabled="saving">
+        {{ saving ? 'Saving…' : 'Save rule' }}
+      </button>
     </footer>
   </form>
 </template>
 
 <style scoped>
 .form {
-  display: grid;
-  gap: 0.85rem;
-  padding: 1.25rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg-elevated);
+  gap: var(--space-4);
 }
 
 header,
@@ -191,13 +195,7 @@ footer,
 .row {
   display: flex;
   justify-content: space-between;
-  gap: 0.75rem;
-}
-
-header h2 {
-  margin: 0;
-  font-family: var(--font-display);
-  font-size: 1.25rem;
+  gap: var(--space-3);
 }
 
 .row > label {
@@ -208,7 +206,7 @@ label {
   display: grid;
   gap: 0.3rem;
   color: var(--text-muted);
-  font-size: 0.85rem;
+  font-size: 0.8125rem;
 }
 
 .check {
@@ -217,34 +215,7 @@ label {
   color: var(--text);
 }
 
-input,
-select {
-  width: 100%;
-  padding: 0.55rem 0.7rem;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
-  background: var(--bg-soft);
-  color: var(--text);
-}
-
-button {
-  padding: 0.55rem 0.9rem;
-  border-radius: var(--radius-sm);
-  border: 0;
-  background: var(--need);
-  color: #071018;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-button:disabled {
-  opacity: 0.6;
-}
-
-.ghost {
-  background: transparent;
-  border: 1px solid var(--border-strong);
-  color: var(--text);
-  font-weight: 500;
+footer {
+  justify-content: end;
 }
 </style>

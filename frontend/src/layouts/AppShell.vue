@@ -1,19 +1,16 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { useRoute } from 'vue-router'
+import { RouterLink, RouterView, useRoute } from 'vue-router'
+import AppIcon, { type IconName } from '../components/ui/AppIcon.vue'
 
 const route = useRoute()
 
-const links = [
-  { to: '/', label: 'Overview', exact: true },
-  { to: '/activity', label: 'Activity', exact: false },
-  { to: '/review', label: 'Review', exact: false },
-  { to: '/rules', label: 'Rules', exact: false },
-] as const
-
-const pageTitle = computed(() =>
-  typeof route.meta.title === 'string' ? route.meta.title : 'ClearSpend',
-)
+const links: Array<{ to: string; label: string; exact: boolean; icon: IconName }> = [
+  { to: '/', label: 'Overview', exact: true, icon: 'dashboard' },
+  { to: '/activity', label: 'Activity', exact: false, icon: 'activity' },
+  { to: '/review', label: 'Review', exact: false, icon: 'review' },
+  { to: '/rules', label: 'Rules', exact: false, icon: 'rules' },
+]
 
 function isActive(path: string, exact: boolean): boolean {
   if (exact) {
@@ -22,14 +19,16 @@ function isActive(path: string, exact: boolean): boolean {
 
   return route.path === path || route.path.startsWith(`${path}/`)
 }
+
+const routeKey = computed(() => String(route.name ?? route.path))
 </script>
 
 <template>
   <div class="shell">
     <aside class="sidebar" aria-label="Primary">
       <div class="brand">
-        <p class="brand-mark">ClearSpend</p>
-        <p class="brand-sub">Dollarwise-inspired POC</p>
+        <span class="brand-mark" aria-hidden="true">C</span>
+        <span class="brand-name">ClearSpend</span>
       </div>
 
       <nav class="nav">
@@ -39,20 +38,42 @@ function isActive(path: string, exact: boolean): boolean {
           :to="link.to"
           class="nav-link"
           :class="{ active: isActive(link.to, link.exact) }"
+          :aria-current="isActive(link.to, link.exact) ? 'page' : undefined"
         >
-          {{ link.label }}
+          <AppIcon :name="link.icon" :size="18" />
+          <span>{{ link.label }}</span>
         </RouterLink>
       </nav>
 
-      <p class="persona">Demo persona · Jordan Lee</p>
+      <div class="sidebar-footer">
+        <div class="premium panel">
+          <div class="premium-top">
+            <span class="gem">
+              <AppIcon name="gem" :size="16" />
+            </span>
+            <span class="pill pill-accent">Active</span>
+          </div>
+          <p class="premium-title">Premium</p>
+          <p class="premium-sub">All features unlocked</p>
+        </div>
+
+        <div class="persona">
+          <span class="avatar" aria-hidden="true">JL</span>
+          <div>
+            <p class="persona-name">Jordan Lee</p>
+            <p class="persona-role">Demo persona</p>
+          </div>
+        </div>
+      </div>
     </aside>
 
     <div class="main-column">
       <header class="topbar">
-        <div>
-          <p class="eyebrow">ClearSpend</p>
-          <h1>{{ pageTitle }}</h1>
+        <div class="brand mobile-brand">
+          <span class="brand-mark" aria-hidden="true">C</span>
+          <span class="brand-name">ClearSpend</span>
         </div>
+        <span class="avatar" aria-hidden="true">JL</span>
       </header>
 
       <nav class="mobile-nav" aria-label="Mobile">
@@ -62,13 +83,19 @@ function isActive(path: string, exact: boolean): boolean {
           :to="link.to"
           class="mobile-link"
           :class="{ active: isActive(link.to, link.exact) }"
+          :aria-current="isActive(link.to, link.exact) ? 'page' : undefined"
         >
-          {{ link.label }}
+          <AppIcon :name="link.icon" :size="16" />
+          <span>{{ link.label }}</span>
         </RouterLink>
       </nav>
 
       <main class="content">
-        <RouterView />
+        <RouterView v-slot="{ Component }">
+          <Transition name="page-fade" mode="out-in">
+            <component :is="Component" :key="routeKey" />
+          </Transition>
+        </RouterView>
       </main>
     </div>
   </div>
@@ -77,7 +104,7 @@ function isActive(path: string, exact: boolean): boolean {
 <style scoped>
 .shell {
   display: grid;
-  grid-template-columns: 16.5rem minmax(0, 1fr);
+  grid-template-columns: 15rem minmax(0, 1fr);
   min-height: 100vh;
 }
 
@@ -86,113 +113,154 @@ function isActive(path: string, exact: boolean): boolean {
   top: 0;
   display: flex;
   flex-direction: column;
-  gap: 2rem;
+  gap: var(--space-6);
   height: 100vh;
-  padding: 1.75rem 1.25rem;
+  padding: var(--space-5) var(--space-3);
   border-right: 1px solid var(--border);
-  background: linear-gradient(180deg, rgba(22, 32, 51, 0.96), rgba(11, 18, 32, 0.98));
+  background: var(--bg-deep);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 0 var(--space-2);
 }
 
 .brand-mark {
-  margin: 0;
-  font-family: var(--font-display);
-  font-size: 1.65rem;
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 0.55rem;
+  background: linear-gradient(145deg, var(--accent), #0f766e);
+  color: var(--accent-ink);
+  font-size: 0.85rem;
   font-weight: 700;
-  letter-spacing: -0.03em;
 }
 
-.brand-sub {
-  margin: 0.35rem 0 0;
-  color: var(--text-muted);
-  font-size: 0.85rem;
+.brand-name {
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
 }
 
 .nav {
   display: grid;
-  gap: 0.35rem;
+  gap: var(--space-1);
 }
 
 .nav-link {
-  padding: 0.7rem 0.85rem;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 2.375rem;
+  padding: 0.55rem 0.75rem;
   border-radius: var(--radius-sm);
   color: var(--text-muted);
+  font-size: 0.84rem;
+  font-weight: 500;
   transition:
     background 160ms ease,
-    color 160ms ease,
-    transform 160ms ease;
+    color 160ms ease;
 }
 
 .nav-link:hover {
   color: var(--text);
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--bg-hover);
 }
 
 .nav-link.active {
-  color: var(--text);
-  background: linear-gradient(90deg, var(--need-soft), transparent);
-  box-shadow: inset 3px 0 0 var(--need);
+  color: var(--accent-text);
+  background: var(--accent-soft);
+}
+
+.sidebar-footer {
+  margin-top: auto;
+  display: grid;
+  gap: var(--space-4);
+}
+
+.premium {
+  gap: var(--space-2);
+  padding: var(--space-4);
+}
+
+.premium-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.gem {
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+
+.premium-title {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.premium-sub {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.72rem;
 }
 
 .persona {
-  margin-top: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 0 var(--space-2);
+}
+
+.avatar {
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: var(--radius-pill);
+  background: var(--bg-soft);
+  color: var(--text);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.persona-name {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.persona-role {
+  margin: 0;
   color: var(--text-dim);
-  font-size: 0.8rem;
+  font-size: 0.72rem;
 }
 
 .main-column {
   min-width: 0;
 }
 
-.topbar {
-  display: none;
-  padding: 1.25rem 1.25rem 0.5rem;
-}
-
-.topbar h1 {
-  margin: 0.15rem 0 0;
-  font-family: var(--font-display);
-  font-size: 1.75rem;
-  font-weight: 600;
-}
-
-.eyebrow {
-  margin: 0;
-  color: var(--text-dim);
-  font-size: 0.75rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
+.topbar,
 .mobile-nav {
   display: none;
-  gap: 0.4rem;
-  padding: 0.75rem 1rem;
-  overflow-x: auto;
-  border-bottom: 1px solid var(--border);
-  background: rgba(16, 24, 38, 0.9);
-  backdrop-filter: blur(8px);
-  position: sticky;
-  top: 0;
-  z-index: 5;
-}
-
-.mobile-link {
-  flex: 0 0 auto;
-  padding: 0.45rem 0.8rem;
-  border-radius: 999px;
-  border: 1px solid transparent;
-  color: var(--text-muted);
-  font-size: 0.9rem;
-}
-
-.mobile-link.active {
-  color: var(--text);
-  border-color: var(--border-strong);
-  background: var(--bg-soft);
 }
 
 .content {
-  padding: 1.5rem 1.75rem 3rem;
+  padding: var(--space-8) var(--space-8) var(--space-10);
+}
+
+.content > * {
+  max-width: 80rem;
+  margin-inline: auto;
 }
 
 @media (max-width: 900px) {
@@ -204,9 +272,46 @@ function isActive(path: string, exact: boolean): boolean {
     display: none;
   }
 
-  .topbar,
+  .topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--space-4) var(--space-4) var(--space-2);
+  }
+
   .mobile-nav {
     display: flex;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-4) var(--space-3);
+    overflow-x: auto;
+    border-bottom: 1px solid var(--border);
+    background: rgba(13, 13, 13, 0.92);
+    backdrop-filter: blur(8px);
+    position: sticky;
+    top: 0;
+    z-index: 5;
+  }
+
+  .mobile-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex: 0 0 auto;
+    padding: 0.45rem 0.8rem;
+    border-radius: var(--radius-pill);
+    border: 1px solid transparent;
+    color: var(--text-muted);
+    font-size: 0.84rem;
+  }
+
+  .mobile-link.active {
+    color: var(--accent-text);
+    border-color: rgba(34, 197, 94, 0.35);
+    background: var(--accent-soft);
+  }
+
+  .content {
+    padding: var(--space-4) var(--space-4) var(--space-8);
   }
 }
 </style>

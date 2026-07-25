@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { Bucket } from '../../types/bucket'
+import AppIcon from '../ui/AppIcon.vue'
 
 defineProps<{
   updating: boolean
@@ -9,78 +10,144 @@ defineProps<{
 const emit = defineEmits<{
   categorize: [bucket: Bucket]
   undo: []
+  skip: []
 }>()
 </script>
 
 <template>
   <div class="actions">
-    <button type="button" class="want" :disabled="updating" @click="emit('categorize', 'want')">
-      Want <kbd>←</kbd>
-    </button>
-    <button
-      type="button"
-      class="savings"
-      :disabled="updating"
-      @click="emit('categorize', 'savings')"
-    >
-      Savings <kbd>↓</kbd>
-    </button>
-    <button type="button" class="need" :disabled="updating" @click="emit('categorize', 'need')">
-      Need <kbd>→</kbd>
-    </button>
-    <button type="button" class="undo" :disabled="updating || !canUndo" @click="emit('undo')">
-      Undo <kbd>U</kbd>
-    </button>
+    <div class="circles">
+      <button
+        type="button"
+        class="circle want"
+        :disabled="updating"
+        aria-label="Want"
+        @click="emit('categorize', 'want')"
+      >
+        <span class="ring"><AppIcon name="arrow-left" :size="20" /></span>
+        <span>Wants <kbd>←</kbd></span>
+      </button>
+      <button
+        type="button"
+        class="circle savings"
+        :disabled="updating"
+        aria-label="Savings"
+        @click="emit('categorize', 'savings')"
+      >
+        <span class="ring"><AppIcon name="arrow-down" :size="20" /></span>
+        <span>Savings <kbd>↓</kbd></span>
+      </button>
+      <button
+        type="button"
+        class="circle need"
+        :disabled="updating"
+        aria-label="Need"
+        @click="emit('categorize', 'need')"
+      >
+        <span class="ring"><AppIcon name="arrow-right" :size="20" /></span>
+        <span>Needs <kbd>→</kbd></span>
+      </button>
+    </div>
+
+    <div class="footer">
+      <button
+        type="button"
+        class="btn btn-ghost"
+        :disabled="updating || !canUndo"
+        @click="emit('undo')"
+      >
+        <AppIcon name="undo" :size="16" />
+        Undo <kbd>U</kbd>
+      </button>
+      <button type="button" class="btn btn-ghost" :disabled="updating" @click="emit('skip')">
+        <AppIcon name="skip" :size="16" />
+        Skip
+      </button>
+    </div>
   </div>
 </template>
 
 <style scoped>
 .actions {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0.65rem;
+  gap: var(--space-4);
 }
 
-button {
+.circles {
   display: grid;
-  gap: 0.2rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.circle {
+  display: grid;
   justify-items: center;
-  padding: 0.75rem 0.5rem;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
-  background: var(--bg-soft);
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 0;
+  background: transparent;
   color: var(--text);
   cursor: pointer;
 }
 
-button:disabled {
+.circle:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
-kbd {
-  font-size: 0.75rem;
-  color: var(--text-dim);
+.ring {
+  display: grid;
+  place-items: center;
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: var(--radius-pill);
+  border: 2px solid currentColor;
+  background: var(--bg-soft);
 }
 
 .want {
-  border-color: rgba(240, 193, 75, 0.45);
+  color: #fcd34d;
+}
+
+.want .ring {
   background: var(--want-soft);
 }
 
-.need {
-  border-color: rgba(79, 140, 255, 0.45);
-  background: var(--need-soft);
+.savings {
+  color: var(--accent-text);
 }
 
-.savings {
-  border-color: rgba(62, 207, 142, 0.45);
+.savings .ring {
   background: var(--savings-soft);
 }
 
+.need {
+  color: #93c5fd;
+}
+
+.need .ring {
+  background: var(--need-soft);
+}
+
+.circle span {
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+kbd {
+  font-size: 0.68rem;
+  color: var(--text-dim);
+}
+
+.footer {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
 @media (max-width: 640px) {
-  .actions {
-    grid-template-columns: 1fr 1fr;
+  .circles {
+    grid-template-columns: 1fr;
   }
 }
 </style>
