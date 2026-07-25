@@ -2,6 +2,9 @@
 
 namespace Database\Factories;
 
+use App\Enums\Bucket;
+use App\Enums\ReviewSource;
+use App\Enums\TransactionKind;
 use App\Models\Transaction;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
@@ -12,49 +15,46 @@ class TransactionFactory extends Factory
 {
     protected $model = Transaction::class;
 
-    /**
-     * Define the model's default state.
-     *
-     * @return array<string, mixed>
-     */
     public function definition(): array
     {
         return [
-            'merchant' => fake()->randomElement([
-                'HEB',
-                'Shell',
-                'Netflix',
-                'Spotify',
-                'Amazon',
-                'Chipotle',
-                'Capital One Payment',
-            ]),
-            'amount' => fake()->randomFloat(2, 5, 250),
-            'category' => null,
-            'transaction_date' => fake()->dateTimeBetween('-30 days', 'now')->format('Y-m-d'),
+            'account_id' => null,
+            'merchant' => fake()->company(),
+            'amount_cents' => fake()->numberBetween(500, 20_000),
+            'kind' => TransactionKind::Expense,
+            'bucket' => null,
+            'subcategory' => null,
+            'transaction_date' => fake()->dateTimeBetween('-2 weeks', 'now')->format('Y-m-d'),
             'reviewed_at' => null,
+            'review_source' => null,
+            'confidence' => null,
+            'review_explanation' => null,
+            'notes' => null,
+            'idempotency_key' => null,
         ];
     }
 
-    /**
-     * Mark the transaction as already reviewed.
-     */
     public function reviewed(): static
     {
         return $this->state(fn () => [
-            'category' => fake()->randomElement(['need', 'want', 'debt_savings']),
+            'bucket' => Bucket::Need,
+            'subcategory' => 'groceries',
             'reviewed_at' => now(),
+            'review_source' => ReviewSource::Manual,
+            'confidence' => 100,
         ]);
     }
 
-    /**
-     * Keep the transaction unreviewed.
-     */
     public function unreviewed(): static
     {
         return $this->state(fn () => [
-            'category' => null,
+            'bucket' => null,
+            'subcategory' => null,
             'reviewed_at' => null,
+            'review_source' => null,
+            'confidence' => null,
+            'review_explanation' => null,
+            'idempotency_key' => null,
         ]);
     }
 }

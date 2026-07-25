@@ -1,16 +1,51 @@
-# Hammer Media Interview Prep — Transaction Review
+# ClearSpend — Dollarwise-inspired weekend POC
 
-One focused feature: review and categorize financial transactions.
+ClearSpend is a desktop-first personal finance POC inspired by Dollarwise-style
+safe-to-spend forecasting and transaction review. A seeded synthetic persona
+(Jordan Lee) can:
+
+- See an explainable **safe-to-spend** forecast with breakdown, 50/30/20 progress,
+  cash flows, account sync health, and recent activity
+- **Review** unreviewed transactions into Needs / Wants / Savings (drag, keyboard,
+  buttons, undo)
+- Run **Smart Review** — rules + local heuristics with an AI-ready categorizer
+  seam (not a hosted LLM)
+- Manage **Activity** in a scannable table (search/filters, create/edit)
+- Maintain practical **categorization rules** for future Smart Review batches
 
 Stack:
-- Frontend: Vue 3.5 + Vite + TypeScript
-- Backend: Laravel 13 API + SQLite
+
+- Frontend: Vue 3.5 + Vite + TypeScript + Vue Router
+- Backend: Laravel 13 JSON API + SQLite
+
+Money is stored as integer cents. Laravel is authoritative for financial totals;
+Vue formats and presents only. The API is public and stateless (no auth, no Plaid).
+
+## Routes (Vue)
+
+| Path | Purpose |
+|------|---------|
+| `/` | Overview / safe-to-spend |
+| `/activity` | Transaction table |
+| `/review` | Categorization queue |
+| `/rules` | Rules CRUD |
+
+## API surface
+
+- `GET /api/dashboard` — persona, safe-to-spend, plan, cash flows, accounts, recent txs
+- `GET /api/accounts`
+- `GET|POST /api/transactions`, `PATCH /api/transactions/{id}`
+- `POST /api/transactions/{id}/undo`, `GET /api/transactions/{id}/suggestion`
+- `POST /api/smart-review` — optional `{ "batch_key": "..." }` (retry-safe)
+- `GET|POST /api/rules`, `PATCH|DELETE /api/rules/{id}`
+
+Responses use Laravel Resource envelopes: `{ "data": ... }`.
+
+Buckets: `need`, `want`, `savings` (legacy `debt_savings` / `category` aliases still accepted on patch).
 
 ## 1. Required software
 
-- PHP 8.3+ (this machine has 8.5) with the SQLite extensions:
-  - `pdo_sqlite`
-  - `sqlite3`
+- PHP 8.3+ with `pdo_sqlite` and `sqlite3`
 - Composer 2
 - Node.js 20+ and npm
 
@@ -21,195 +56,72 @@ sudo pacman -S php php-sqlite composer nodejs npm
 php -m | grep -i sqlite
 ```
 
-You should see `pdo_sqlite` and `sqlite3`.
-
-If the system SQLite extensions are not installed yet, this repo also includes a local helper that loads project-local modules for Artisan commands:
+Local helper if system SQLite modules are missing:
 
 ```bash
 ./scripts/php-with-sqlite.sh artisan migrate:fresh --seed
-./scripts/php-with-sqlite.sh artisan test
 ./scripts/php-with-sqlite.sh artisan serve
 ```
 
-Prefer installing the system `php-sqlite` package when you can.
-## 2. Install frontend dependencies
+## 2. Install
 
 ```bash
-cd frontend
-npm install
+cd frontend && npm install
+cd ../backend && composer install
 ```
 
-## 3. Install backend dependencies
+## 3. Database
 
 ```bash
 cd backend
-composer install
-```
-
-## 4. Create or configure the SQLite database
-
-Laravel is already configured for SQLite in `.env` (`DB_CONNECTION=sqlite`).
-
-Create the empty database file if it does not exist:
-
-```bash
-cd backend
-touch database/database.sqlite
-```
-
-If `.env` is missing:
-
-```bash
-cp .env.example .env
-php artisan key:generate
-```
-
-## 5. Run migrations and seeders
-
-```bash
-cd backend
+touch database/database.sqlite   # if needed
+cp .env.example .env             # if needed
+php artisan key:generate         # if needed
 php artisan migrate:fresh --seed
 ```
 
-This creates tables and seeds at least five realistic transactions.
+Seeds Jordan Lee’s accounts, 50/30/20 plan, cash flows, rules, and mixed reviewed/unreviewed transactions.
 
-## 6. Start Laravel
-
-```bash
-cd backend
-php artisan serve
-```
-
-Laravel listens on `http://127.0.0.1:8000`.
-
-Useful checks:
+## 4. Run locally
 
 ```bash
-php artisan route:list
-php artisan tinker
+# terminal 1
+cd backend && php artisan serve
+
+# terminal 2
+cd frontend && npm run dev
 ```
 
-## 7. Start Vue
+Vite proxies `/api` to `http://127.0.0.1:8000`. Open the Vite URL (usually `http://127.0.0.1:5173`).
 
-In a second terminal:
-
-```bash
-cd frontend
-npm run dev
-```
-
-Vite proxies `/api` requests to `http://127.0.0.1:8000`.
-
-## 8. Run Laravel tests
-
-```bash
-cd backend
-php artisan test
-```
-
-The feature tests describe the finished API and currently pass.
-
-## 9. Backend learning work
-
-The original four Laravel learning tasks are complete:
-
-1. `Transaction` model mass assignment and casts
-2. `UpdateTransactionRequest` validation
-3. The unreviewed transaction query
-4. Transaction category and review updates
-
-## 10. Core backend files
-
-- `backend/app/Models/Transaction.php`
-- `backend/app/Http/Requests/UpdateTransactionRequest.php`
-- `backend/app/Http/Controllers/TransactionController.php`
-
-## 11. Expected request flow (Vue → Laravel)
-
-1. Vue loads and calls `GET /api/transactions`.
-2. Vite forwards that request to Laravel at `http://127.0.0.1:8000/api/transactions`.
-3. `TransactionController@index` returns unreviewed transactions as a resource collection:
-   `{ "data": [ ... ] }`.
-4. The UI shows one transaction at a time (merchant, amount, date, current category).
-5. When you click Need / Want / Debt / Savings, Vue sends:
-
-   `PATCH /api/transactions/{id}`
-
-   ```json
-   {
-     "category": "need",
-     "reviewed": true
-   }
-   ```
-
-6. Laravel validates the body, updates the row, and returns:
-
-   ```json
-   {
-     "data": {
-       "id": 1,
-       "merchant": "HEB",
-       "amount": "84.23",
-       "category": "need",
-       "transaction_date": "2026-07-20",
-       "reviewed": true
-     }
-   }
-   ```
-
-7. Vue advances to the next unreviewed transaction, or shows a completion state.
-
-Allowed stored category values:
-
-- `need`
-- `want`
-- `debt_savings`
-
-## 12. Common debugging commands
-
-```bash
-# List registered routes (confirm /api/transactions exists)
-cd backend && php artisan route:list
-
-# Rebuild database and re-seed sample transactions
-cd backend && php artisan migrate:fresh --seed
-
-# Run the feature tests
-cd backend && php artisan test
-
-# Inspect data interactively
-cd backend && php artisan tinker
-```
-
-In Tinker, useful checks after seeding:
-
-```php
-\App\Models\Transaction::count();
-\App\Models\Transaction::all(['id', 'merchant', 'reviewed_at']);
-```
-
-Frontend checks:
-
-```bash
-cd frontend
-npm run typecheck
-npm run test
-npm run build
-```
-
-Run every backend and frontend gate from the repository root:
+## 5. Quality gates
 
 ```bash
 ./scripts/verify.sh
 ```
 
-## 13. AI-assisted delivery workflow
+Or individually:
 
-Project guidance is layered through `AGENTS.md`, `.cursor/rules/`, on-demand
-skills, Laravel Boost, and deterministic safety hooks. The complete daily,
-supervised Ralph, bounded CLI, stopping, and recovery procedures are in
-[`docs/ai-workflow.md`](docs/ai-workflow.md).
+```bash
+cd backend && php artisan test && vendor/bin/pint --test
+cd frontend && npm run typecheck && npm run test && npm run build
+```
 
-Start autonomous work only from a clean, passing baseline. All diffs remain
-local for human review; commits, pushes, merges, and deployments require an
-explicit decision.
+## 6. Smart Review (honest scope)
+
+Smart Review auto-applies **high-confidence** matches from:
+
+1. Enabled DB rules (lower `priority` wins)
+2. Local merchant/kind heuristics
+
+Uncertain merchants stay in the review queue with explanations. The
+`TransactionCategorizer` contract is the AI-ready seam for a future model —
+this POC does **not** call a hosted LLM.
+
+## 7. Specs and workflow
+
+- Feature spec: [`docs/specs/clearspend.md`](docs/specs/clearspend.md)
+- Implementation plan: [`docs/specs/clearspend-plan.md`](docs/specs/clearspend-plan.md)
+- AI delivery workflow: [`docs/ai-workflow.md`](docs/ai-workflow.md)
+
+Commits, pushes, merges, and deploys require an explicit human decision.

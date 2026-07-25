@@ -27,8 +27,9 @@ From the repository root:
 - Use conventional Laravel controllers, Form Requests, Resources, Eloquent
   models, migrations, factories, and feature tests.
 - Use Vue Composition API with `<script setup lang="ts">`, native `fetch`, and
-  small components. Do not add Router, Pinia, Axios, or a UI framework without
-  a demonstrated need.
+  small components. Vue Router is approved for ClearSpend’s four routes
+  (Overview, Activity, Review, Rules). Do not add Pinia, Axios, or a UI
+  framework without a demonstrated need.
 - Keep API request/response types explicit and preserve Laravel Resource
   `{ "data": ... }` envelopes.
 - Use SQLite locally and in backend tests.

@@ -1,36 +1,78 @@
-/**
- * Allowed category values stored by the API.
- * The UI may show friendlier labels for these same values.
- */
-export type TransactionCategory = 'need' | 'want' | 'debt_savings'
+import type { Bucket, TransactionKind } from './bucket'
 
-/**
- * One transaction as returned by Laravel's TransactionResource.
- */
+export type TransactionCategory = Bucket
+
+export interface TransactionAccountSummary {
+  id: number
+  name: string
+  institution_name: string
+}
+
 export interface Transaction {
   id: number
+  account_id: number | null
+  account?: TransactionAccountSummary | null
   merchant: string
+  amount_cents: number
   /** Decimal amount serialized as a string, e.g. "84.23" */
   amount: string
-  category: TransactionCategory | null
-  /** ISO date string, e.g. "2026-07-20" */
+  kind: TransactionKind
+  bucket: Bucket | null
+  subcategory: string | null
+  /** Legacy alias of bucket for transitional clients */
+  category: Bucket | null
   transaction_date: string
-  /** true when reviewed_at is set on the backend */
   reviewed: boolean
+  review_source: string | null
+  confidence: number | null
+  review_explanation: string | null
+  notes: string | null
 }
 
-/** Body for PATCH /api/transactions/{id} */
 export interface UpdateTransactionPayload {
-  category: TransactionCategory
-  reviewed: boolean
+  merchant?: string
+  amount_cents?: number
+  kind?: TransactionKind
+  bucket?: Bucket | null
+  category?: Bucket | 'debt_savings'
+  subcategory?: string | null
+  transaction_date?: string
+  account_id?: number | null
+  notes?: string | null
+  reviewed?: boolean
 }
 
-/** Laravel single-resource response: { data: Transaction } */
+export interface StoreTransactionPayload {
+  merchant: string
+  amount_cents: number
+  kind: TransactionKind
+  transaction_date: string
+  account_id?: number | null
+  bucket?: Bucket | null
+  subcategory?: string | null
+  notes?: string | null
+  reviewed?: boolean
+}
+
+export interface TransactionSuggestion {
+  bucket: Bucket | null
+  subcategory: string | null
+  confidence: number
+  source: string
+  explanation: string
+  auto_review: boolean
+}
+
 export interface TransactionResourceResponse {
   data: Transaction
 }
 
-/** Laravel resource collection response: { data: Transaction[] } */
 export interface TransactionCollectionResponse {
   data: Transaction[]
+  links?: unknown
+  meta?: unknown
+}
+
+export interface SuggestionResourceResponse {
+  data: TransactionSuggestion
 }
