@@ -1,3 +1,7 @@
+/**
+ * ActivityView
+ * - edit form sends bucket: null when clearing a category (not omitted)
+ */
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fetchAccounts } from '../api/accountApi'
@@ -50,6 +54,7 @@ beforeEach(() => {
 })
 
 describe('ActivityView', () => {
+  /** Clearing the bucket select must POST/PATCH with bucket: null so validation can run. */
   it('sends an explicit null when clearing a transaction bucket', async () => {
     const wrapper = mount(ActivityView)
     await flushPromises()

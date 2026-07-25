@@ -1,3 +1,11 @@
+/**
+ * TransactionReviewView
+ * - loading / empty / error+retry states
+ * - formatted merchant/amount/date rendering
+ * - categorize (disable while saving, advance, error stays put)
+ * - undo previous review
+ * - smart review reload
+ */
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
@@ -102,6 +110,7 @@ beforeEach(() => {
 })
 
 describe('TransactionReviewView', () => {
+  /** Shows a status message while the review queue request is in flight. */
   it('shows a loading state while transactions are being fetched', () => {
     vi.mocked(fetchReviewQueue).mockReturnValue(new Promise(() => {}))
 
@@ -110,6 +119,7 @@ describe('TransactionReviewView', () => {
     expect(wrapper.get('[role="status"]').text()).toBe('Loading transactions…')
   })
 
+  /** Renders merchant, formatted dollars, date, suggestion, and category actions. */
   it('renders transaction details with formatted currency and date', async () => {
     vi.mocked(fetchReviewQueue).mockResolvedValue([firstTransaction])
 
@@ -126,6 +136,7 @@ describe('TransactionReviewView', () => {
     expect(buttonContaining(wrapper, 'Savings').exists()).toBe(true)
   })
 
+  /** Empty queue shows the “all caught up” completion state. */
   it('shows the completion state when no transactions remain', async () => {
     vi.mocked(fetchReviewQueue).mockResolvedValue([])
 
@@ -136,6 +147,7 @@ describe('TransactionReviewView', () => {
     expect(wrapper.text()).toContain('There are no unreviewed transactions left')
   })
 
+  /** Load failure surfaces an alert; Try again refetches the queue. */
   it('shows a load error and retries the request', async () => {
     vi.mocked(fetchReviewQueue)
       .mockRejectedValueOnce(new Error('Unable to load transactions'))
@@ -153,6 +165,7 @@ describe('TransactionReviewView', () => {
     expect(wrapper.text()).toContain('All caught up')
   })
 
+  /** While saving, buttons disable; on success the queue advances to the next item. */
   it('disables category buttons while saving and advances after success', async () => {
     const update = deferred<Transaction>()
     vi.mocked(fetchReviewQueue).mockResolvedValue([firstTransaction, secondTransaction])
@@ -184,6 +197,7 @@ describe('TransactionReviewView', () => {
     expect(buttonContaining(wrapper, 'Need').attributes('disabled')).toBeUndefined()
   })
 
+  /** Failed categorize keeps the same transaction visible and shows an error. */
   it('keeps the current transaction visible and reports update failures', async () => {
     vi.mocked(fetchReviewQueue).mockResolvedValue([firstTransaction])
     vi.mocked(updateTransaction).mockRejectedValue(new Error('Could not save category'))
@@ -200,6 +214,7 @@ describe('TransactionReviewView', () => {
     expect(buttonContaining(wrapper, 'Need').attributes('disabled')).toBeUndefined()
   })
 
+  /** Undo calls the undo API and restores the previously reviewed transaction. */
   it('undoes the previous review', async () => {
     vi.mocked(fetchReviewQueue).mockResolvedValue([firstTransaction, secondTransaction])
     vi.mocked(updateTransaction).mockResolvedValue({
@@ -227,6 +242,7 @@ describe('TransactionReviewView', () => {
     expect(wrapper.text()).toContain('HEB')
   })
 
+  /** Smart Review runs the batch endpoint and reloads the remaining queue. */
   it('runs smart review and reloads the queue', async () => {
     vi.mocked(fetchReviewQueue)
       .mockResolvedValueOnce([firstTransaction])

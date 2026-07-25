@@ -6,12 +6,17 @@ use App\Enums\Bucket;
 use App\Models\Account;
 use App\Models\CategorizationRule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use PHPUnit\Framework\Attributes\TestDox;
 use Tests\TestCase;
 
+/**
+ * Categorization rules API: CRUD, priority ordering, and amount-bound validation.
+ */
 class CategorizationRuleApiTest extends TestCase
 {
     use RefreshDatabase;
 
+    #[TestDox('Creates, lists (priority-ordered), updates, and deletes categorization rules')]
     public function test_rules_crud_and_priority_ordering(): void
     {
         $account = Account::factory()->create();
@@ -62,6 +67,7 @@ class CategorizationRuleApiTest extends TestCase
         ]);
     }
 
+    #[TestDox('Rejects creating a rule when amount max is below amount min')]
     public function test_store_rejects_invalid_amount_bounds(): void
     {
         $this->postJson('/api/rules', [
@@ -74,6 +80,7 @@ class CategorizationRuleApiTest extends TestCase
             ->assertJsonValidationErrors(['amount_cents_max']);
     }
 
+    #[TestDox('Rejects patching amount max below the rule’s existing amount min')]
     public function test_patch_rejects_amount_max_below_existing_min(): void
     {
         $rule = CategorizationRule::factory()->create([

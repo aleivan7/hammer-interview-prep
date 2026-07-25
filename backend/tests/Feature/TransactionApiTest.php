@@ -5,12 +5,17 @@ namespace Tests\Feature;
 use App\Enums\Bucket;
 use App\Models\Transaction;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use PHPUnit\Framework\Attributes\TestDox;
 use Tests\TestCase;
 
+/**
+ * Transactions API: review queue, create/edit/undo, and reviewed-bucket invariants.
+ */
 class TransactionApiTest extends TestCase
 {
     use RefreshDatabase;
 
+    #[TestDox('Index with unreviewed_only returns only transactions still awaiting review')]
     public function test_index_returns_only_unreviewed_transactions_when_requested(): void
     {
         $unreviewed = Transaction::factory()->unreviewed()->create([
@@ -33,6 +38,7 @@ class TransactionApiTest extends TestCase
         ]);
     }
 
+    #[TestDox('Review queue index returns unreviewed transactions oldest-first')]
     public function test_index_returns_transactions_oldest_first_for_review_queue(): void
     {
         $newer = Transaction::factory()->unreviewed()->create([
@@ -52,6 +58,7 @@ class TransactionApiTest extends TestCase
         $response->assertJsonPath('data.1.id', $newer->id);
     }
 
+    #[TestDox('Patch with a valid category sets the transaction bucket')]
     public function test_patch_with_valid_category_updates_bucket(): void
     {
         $transaction = Transaction::factory()->unreviewed()->create([
@@ -73,6 +80,7 @@ class TransactionApiTest extends TestCase
         ]);
     }
 
+    #[TestDox('Patch with reviewed true stamps reviewed_at')]
     public function test_patch_with_reviewed_true_sets_reviewed_at(): void
     {
         $transaction = Transaction::factory()->unreviewed()->create();
@@ -89,6 +97,7 @@ class TransactionApiTest extends TestCase
         $this->assertNotNull($transaction->reviewed_at);
     }
 
+    #[TestDox('Patch with reviewed false clears reviewed_at')]
     public function test_patch_with_reviewed_false_clears_reviewed_at(): void
     {
         $transaction = Transaction::factory()->reviewed()->create([
@@ -107,6 +116,7 @@ class TransactionApiTest extends TestCase
         $this->assertNull($transaction->reviewed_at);
     }
 
+    #[TestDox('Patch with an unsupported category returns 422')]
     public function test_patch_with_unsupported_category_returns_422(): void
     {
         $transaction = Transaction::factory()->unreviewed()->create();
@@ -120,6 +130,7 @@ class TransactionApiTest extends TestCase
         $response->assertJsonValidationErrors(['category']);
     }
 
+    #[TestDox('Patch marking unreviewed (uncategorized) as reviewed without a bucket returns 422')]
     public function test_patch_with_missing_category_returns_422(): void
     {
         $transaction = Transaction::factory()->unreviewed()->create();
@@ -131,6 +142,7 @@ class TransactionApiTest extends TestCase
         $response->assertStatus(422);
     }
 
+    #[TestDox('Patch can mark a pre-categorized transaction reviewed without resending the bucket')]
     public function test_patch_can_review_a_pre_categorized_transaction_without_repeating_bucket(): void
     {
         $transaction = Transaction::factory()->unreviewed()->create([
@@ -145,6 +157,7 @@ class TransactionApiTest extends TestCase
             ->assertJsonPath('data.reviewed', true);
     }
 
+    #[TestDox('Patch response matches the Transaction resource JSON shape')]
     public function test_patch_returns_transaction_resource_json_shape(): void
     {
         $transaction = Transaction::factory()->unreviewed()->create([
@@ -181,6 +194,7 @@ class TransactionApiTest extends TestCase
         $response->assertJsonPath('data.reviewed', true);
     }
 
+    #[TestDox('Store creates a manual unreviewed transaction')]
     public function test_store_creates_manual_transaction(): void
     {
         $response = $this->postJson('/api/transactions', [
@@ -200,6 +214,7 @@ class TransactionApiTest extends TestCase
         ]);
     }
 
+    #[TestDox('Store rejects creating a reviewed transaction without a bucket')]
     public function test_store_rejects_reviewed_transaction_without_bucket(): void
     {
         $this->postJson('/api/transactions', [
@@ -213,6 +228,7 @@ class TransactionApiTest extends TestCase
             ->assertJsonValidationErrors(['bucket']);
     }
 
+    #[TestDox('Patch persists field edits when the transaction stays unreviewed')]
     public function test_patch_persists_edits_when_transaction_remains_unreviewed(): void
     {
         $transaction = Transaction::factory()->unreviewed()->create([
@@ -234,6 +250,7 @@ class TransactionApiTest extends TestCase
         ]);
     }
 
+    #[TestDox('Patch persists field edits while clearing review state')]
     public function test_patch_persists_edits_while_undoing_review(): void
     {
         $transaction = Transaction::factory()->reviewed()->create([
@@ -256,6 +273,7 @@ class TransactionApiTest extends TestCase
         ]);
     }
 
+    #[TestDox('Patch updates merchant and bucket on an already-reviewed transaction')]
     public function test_patch_updates_an_already_reviewed_transaction(): void
     {
         $transaction = Transaction::factory()->reviewed()->create([
@@ -280,6 +298,7 @@ class TransactionApiTest extends TestCase
         ]);
     }
 
+    #[TestDox('Patch rejects clearing the bucket while the transaction remains reviewed')]
     public function test_patch_rejects_clearing_bucket_while_transaction_remains_reviewed(): void
     {
         $transaction = Transaction::factory()->reviewed()->create([
@@ -299,6 +318,7 @@ class TransactionApiTest extends TestCase
         ]);
     }
 
+    #[TestDox('Patch accepts savings bucket and maps the legacy debt_savings category alias')]
     public function test_patch_accepts_savings_bucket_and_debt_savings_alias(): void
     {
         $savings = Transaction::factory()->unreviewed()->create();
@@ -321,6 +341,7 @@ class TransactionApiTest extends TestCase
             ->assertJsonPath('data.category', 'savings');
     }
 
+    #[TestDox('Undo endpoint clears review state on a reviewed transaction')]
     public function test_undo_endpoint_clears_review(): void
     {
         $transaction = Transaction::factory()->reviewed()->create([

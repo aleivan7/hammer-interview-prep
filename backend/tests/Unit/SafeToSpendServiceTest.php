@@ -11,12 +11,17 @@ use App\Models\Transaction;
 use App\Services\SafeToSpendService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use PHPUnit\Framework\Attributes\TestDox;
 use Tests\TestCase;
 
+/**
+ * Safe-to-spend service: integer balances/targets, transfer exclusion, refunds.
+ */
 class SafeToSpendServiceTest extends TestCase
 {
     use RefreshDatabase;
 
+    #[TestDox('Computes safe-to-spend from integer account balances, income, bills, and savings target')]
     public function test_cent_math_uses_integer_balances_and_targets(): void
     {
         FinancialPlan::factory()->create([
@@ -54,6 +59,7 @@ class SafeToSpendServiceTest extends TestCase
         $this->assertSame(104_000, $result['bucket_targets']['savings']);
     }
 
+    #[TestDox('Excludes transfer transactions from bucket spending actuals')]
     public function test_transfers_are_excluded_from_bucket_spending(): void
     {
         FinancialPlan::factory()->create([
@@ -83,6 +89,7 @@ class SafeToSpendServiceTest extends TestCase
         $this->assertSame(0, $result['bucket_actuals']['savings']);
     }
 
+    #[TestDox('Subtracts refunds from the matching bucket’s spending actuals')]
     public function test_refunds_reduce_bucket_actuals(): void
     {
         FinancialPlan::factory()->create([

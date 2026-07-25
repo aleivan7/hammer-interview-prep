@@ -1,3 +1,7 @@
+/**
+ * App shell navigation
+ * - mounts Overview and can reach Activity, Review, and Rules routes
+ */
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createMemoryHistory, createRouter, type Router } from 'vue-router'
@@ -114,6 +118,7 @@ beforeEach(() => {
 })
 
 describe('App navigation shell', () => {
+  /** Renders ClearSpend overview, then navigates to Activity, Review, and Rules. */
   it('mounts overview and navigates between primary routes', async () => {
     const router = makeRouter()
     router.push('/')
