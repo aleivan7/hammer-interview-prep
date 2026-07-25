@@ -107,20 +107,18 @@ cd backend
 php artisan test
 ```
 
-The feature tests describe the finished API. They fail until the backend TODOs are completed.
+The feature tests describe the finished API and currently pass.
 
-## 9. Alejandro’s Backend Tasks
+## 9. Backend learning work
 
-Complete these four learning items yourself:
+The original four Laravel learning tasks are complete:
 
-1. `Transaction` model `$fillable` and casts
-2. Validation rules in `UpdateTransactionRequest`
-3. The query in `TransactionController@index`
-4. The update logic in `TransactionController@update`
+1. `Transaction` model mass assignment and casts
+2. `UpdateTransactionRequest` validation
+3. The unreviewed transaction query
+4. Transaction category and review updates
 
-Do not look for finished solutions elsewhere in this repo — they are intentionally omitted.
-
-## 10. Exact backend files containing TODOs
+## 10. Core backend files
 
 - `backend/app/Models/Transaction.php`
 - `backend/app/Http/Requests/UpdateTransactionRequest.php`
@@ -130,7 +128,7 @@ Do not look for finished solutions elsewhere in this repo — they are intention
 
 1. Vue loads and calls `GET /api/transactions`.
 2. Vite forwards that request to Laravel at `http://127.0.0.1:8000/api/transactions`.
-3. `TransactionController@index` should return unreviewed transactions as a resource collection:
+3. `TransactionController@index` returns unreviewed transactions as a resource collection:
    `{ "data": [ ... ] }`.
 4. The UI shows one transaction at a time (merchant, amount, date, current category).
 5. When you click Need / Want / Debt / Savings, Vue sends:
@@ -190,9 +188,28 @@ In Tinker, useful checks after seeding:
 \App\Models\Transaction::all(['id', 'merchant', 'reviewed_at']);
 ```
 
-Frontend type check / production build:
+Frontend checks:
 
 ```bash
 cd frontend
+npm run typecheck
+npm run test
 npm run build
 ```
+
+Run every backend and frontend gate from the repository root:
+
+```bash
+./scripts/verify.sh
+```
+
+## 13. AI-assisted delivery workflow
+
+Project guidance is layered through `AGENTS.md`, `.cursor/rules/`, on-demand
+skills, Laravel Boost, and deterministic safety hooks. The complete daily,
+supervised Ralph, bounded CLI, stopping, and recovery procedures are in
+[`docs/ai-workflow.md`](docs/ai-workflow.md).
+
+Start autonomous work only from a clean, passing baseline. All diffs remain
+local for human review; commits, pushes, merges, and deployments require an
+explicit decision.

@@ -1,0 +1,31 @@
+name: Dependency Review
+
+on:
+  pull_request:
+
+concurrency:
+  group: dependency-review-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  dependency-review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+
+      - name: Dependency review
+        uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4.9.0
+        continue-on-error: true
+        with:
+          fail-on-severity: high
+
+      - name: Remind to enable dependency graph
+        if: failure()
+        run: |
+          echo "::warning::Enable Dependency graph under Settings → Code security so this check can fail closed."
+          echo "https://github.com/${{ github.repository }}/settings/security_analysis"

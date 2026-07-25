@@ -1,0 +1,13 @@
+# Default owner for all paths
+* @aleivan7
+
+# Workflow and repository automation
+/.github/ @aleivan7
+/scripts/ @aleivan7
+
+# Financial domain and API contracts
+/backend/app/ @aleivan7
+/backend/database/ @aleivan7
+/backend/tests/ @aleivan7
+/frontend/src/api/ @aleivan7
+/frontend/src/types/ @aleivan7

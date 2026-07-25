@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Write(**)"
+    ],
+    "deny": [
+      "Shell(git)",
+      "Shell(gh)",
+      "Shell(kubectl)",
+      "Shell(helm)",
+      "Shell(terraform)",
+      "Shell(vercel)",
+      "Shell(netlify)",
+      "Shell(fly)",
+      "Shell(railway)"
+    ]
+  }
+}
