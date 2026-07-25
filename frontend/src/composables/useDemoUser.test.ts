@@ -1,5 +1,5 @@
 /**
- * Demo user composable: profile load, stale-session clear, and reset revision
+ * Demo user composable: profile load, stale-session clear, reset revision, and request racing
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../api/http'
@@ -8,6 +8,7 @@ import {
   DEMO_USER_STORAGE_KEY,
   __resetDemoUserSessionForTests,
   getSelectedDemoUserId,
+  setDemoProfile,
   setSelectedDemoUserId,
 } from '../session/demoUserSession'
 import type { DemoProfile } from '../types/demoUser'
@@ -18,24 +19,28 @@ vi.mock('../api/profileApi', () => ({
   resetDemoProfile: vi.fn(),
 }))
 
-const profile: DemoProfile = {
-  id: 2,
-  name: 'Jordan Lee',
-  email: 'jordan.lee@clearspend.demo',
-  persona_type: 'average',
-  persona_label: 'Average Spender',
-  description: 'Balanced persona',
-  member_since: '2026-01-01',
-  avatar_initials: 'JL',
-  monthly_income_cents: 520000,
-  monthly_income: '5200.00',
-  total_balance_cents: 100000,
-  total_balance: '1000.00',
-  account_count: 3,
-  plan: null,
-  accounts: [],
-  financial_status_label: 'Balanced and on track',
+function makeProfile(id: number, name: string): DemoProfile {
+  return {
+    id,
+    name,
+    email: `${name.toLowerCase().replace(/\s+/g, '.')}@clearspend.demo`,
+    persona_type: 'average',
+    persona_label: 'Average Spender',
+    description: 'Test persona',
+    member_since: '2026-01-01',
+    avatar_initials: 'TP',
+    monthly_income_cents: 500000,
+    monthly_income: '$5,000.00',
+    total_balance_cents: 100000,
+    total_balance: '$1,000.00',
+    account_count: 1,
+    plan: null,
+    accounts: [],
+    financial_status_label: 'On track',
+  }
 }
+
+const profile = makeProfile(2, 'Jordan Lee')
 
 beforeEach(() => {
   localStorage.clear()
@@ -64,6 +69,21 @@ describe('useDemoUser', () => {
 
     expect(fetchProfile).toHaveBeenCalledTimes(1)
     expect(profileRef.value?.name).toBe('Jordan Lee')
+  })
+
+  it('returns the cached profile when already validated for the selected user', async () => {
+    const cached = makeProfile(3, 'Sam Chen')
+    setSelectedDemoUserId(3)
+    setDemoProfile(cached)
+
+    const { ensureProfile } = useDemoUser()
+    // Seed validatedForId by forcing one successful fetch first.
+    vi.mocked(fetchProfile).mockResolvedValueOnce(cached)
+    await ensureProfile({ force: true })
+
+    vi.mocked(fetchProfile).mockClear()
+    await expect(ensureProfile()).resolves.toEqual(cached)
+    expect(fetchProfile).not.toHaveBeenCalled()
   })
 
   it('clears a stale selected id when profile load reports demo_user_invalid', async () => {
@@ -105,5 +125,35 @@ describe('useDemoUser', () => {
     expect(getSelectedDemoUserId()).toBe(1)
     expect(localStorage.getItem(DEMO_USER_STORAGE_KEY)).toBe('1')
     expect(profileRef.value).toBeNull()
+  })
+
+  it('ignores a stale profile response after switching personas', async () => {
+    const first = makeProfile(1, 'Jordan Lee')
+    const second = makeProfile(2, 'Alex Rivera')
+
+    let resolveFirst: ((value: DemoProfile) => void) | undefined
+    vi.mocked(fetchProfile)
+      .mockImplementationOnce(
+        () =>
+          new Promise<DemoProfile>((resolve) => {
+            resolveFirst = resolve
+          }),
+      )
+      .mockResolvedValueOnce(second)
+
+    const { ensureProfile, selectDemoUser, profile: profileRef } = useDemoUser()
+
+    selectDemoUser(1)
+    const firstRequest = ensureProfile({ force: true })
+
+    selectDemoUser(2)
+    const secondRequest = ensureProfile({ force: true })
+
+    await expect(secondRequest).resolves.toEqual(second)
+    expect(profileRef.value).toEqual(second)
+
+    resolveFirst?.(first)
+    await expect(firstRequest).resolves.toBeNull()
+    expect(profileRef.value).toEqual(second)
   })
 })

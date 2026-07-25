@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, shallowRef } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { fetchDemoUsers } from '../api/demoUserApi'
 import PersonaCard from '../components/demo-user/PersonaCard.vue'
 import EmptyState from '../components/ui/EmptyState.vue'
@@ -9,12 +9,22 @@ import { useDemoUser } from '../composables/useDemoUser'
 import type { DemoPersona } from '../types/demoUser'
 
 const router = useRouter()
+const route = useRoute()
 const { selectDemoUser, ensureProfile } = useDemoUser()
 
 const personas = shallowRef<DemoPersona[]>([])
 const loading = shallowRef(true)
 const selectingId = shallowRef<number | null>(null)
 const error = shallowRef<string | null>(null)
+
+function resolvePostLoginTarget(): string {
+  const redirect = route.query.redirect
+  if (typeof redirect === 'string' && redirect.startsWith('/') && !redirect.startsWith('//')) {
+    return redirect
+  }
+
+  return '/'
+}
 
 async function load(): Promise<void> {
   loading.value = true
@@ -37,7 +47,7 @@ async function onSelect(id: number): Promise<void> {
   try {
     selectDemoUser(id)
     await ensureProfile({ force: true })
-    await router.replace({ name: 'overview' })
+    await router.replace(resolvePostLoginTarget())
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Failed to select demo profile.'
   } finally {

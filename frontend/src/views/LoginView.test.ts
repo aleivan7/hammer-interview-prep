@@ -182,4 +182,24 @@ describe('LoginView', () => {
     expect(localStorage.getItem(DEMO_USER_STORAGE_KEY)).toBe('2')
     expect(router.currentRoute.value.name).toBe('overview')
   })
+
+  it('honors a safe redirect query after persona selection', async () => {
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes,
+    })
+    await router.push({ name: 'login', query: { redirect: '/activity' } })
+    await router.isReady()
+
+    const wrapper = mount(LoginView, {
+      global: { plugins: [router] },
+    })
+    await flushPromises()
+
+    const buttons = wrapper.findAll('button').filter((button) => button.text().includes('Continue as Jordan'))
+    await buttons[0].trigger('click')
+    await flushPromises()
+
+    expect(router.currentRoute.value.fullPath).toBe('/activity')
+  })
 })
