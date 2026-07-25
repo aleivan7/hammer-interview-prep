@@ -104,7 +104,26 @@ Evidence:
 - Vitest: review coverage + `App.navigation.test.ts`.
 - README / AGENTS / this plan updated for ClearSpend + Vue Router approval.
 
+### TASK-007: Demo personas and data isolation
+
+Status: complete
+Depends on: TASK-006
+
+Acceptance criteria:
+
+- [x] Three seeded personas with isolated ownership on all financial records.
+- [x] `X-Demo-User` middleware scopes protected APIs; `/api/demo-users` remains public.
+- [x] Login/profile routes, localStorage selection, shell persona display, switch, and per-user reset.
+- [x] Backend/frontend isolation tests and docs describe this as demo selection, not production auth.
+
+Evidence:
+
+- Ownership migration + `DemoPersonaDataService` + middleware/context.
+- Frontend `demoUserSession`, `useDemoUser`, `/login`, `/profile`, guarded router.
+- Feature tests: `DemoUserApiTest`, `ProfileApiTest`, `AccountApiTest`, isolation coverage in existing API tests.
+
 ## Verification log
 
 - 2026-07-25 — `./scripts/verify.sh` — pass on foundation baseline before ClearSpend work.
 - 2026-07-25 — `./scripts/verify.sh` on `feature/clearspend-poc` — pass (29 PHPUnit, 9 Vitest, typecheck, build, pint).
+- 2026-07-25 — Feature 1 demo personas — backend 56 PHPUnit + frontend 24 Vitest before full gate.

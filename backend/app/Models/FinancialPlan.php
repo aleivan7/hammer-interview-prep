@@ -3,8 +3,10 @@
 namespace App\Models;
 
 use Database\Factories\FinancialPlanFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class FinancialPlan extends Model
 {
@@ -12,6 +14,7 @@ class FinancialPlan extends Model
     use HasFactory;
 
     protected $fillable = [
+        'user_id',
         'needs_percent',
         'wants_percent',
         'savings_percent',
@@ -22,11 +25,22 @@ class FinancialPlan extends Model
     protected function casts(): array
     {
         return [
+            'user_id' => 'integer',
             'needs_percent' => 'integer',
             'wants_percent' => 'integer',
             'savings_percent' => 'integer',
             'safety_buffer_cents' => 'integer',
             'monthly_income_cents' => 'integer',
         ];
+    }
+
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
+    }
+
+    public function scopeForUser(Builder $query, User $user): Builder
+    {
+        return $query->where('user_id', $user->id);
     }
 }

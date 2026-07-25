@@ -26,6 +26,7 @@ final class RulesAndHeuristicsCategorizer implements TransactionCategorizer
     private function matchRule(Transaction $transaction): ?CategorizationResult
     {
         $rules = CategorizationRule::query()
+            ->where('user_id', $transaction->user_id)
             ->where('enabled', true)
             ->orderBy('priority')
             ->orderBy('id')

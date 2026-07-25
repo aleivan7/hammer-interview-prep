@@ -4,6 +4,7 @@ namespace Database\Factories;
 
 use App\Enums\Bucket;
 use App\Models\PlannedCashFlow;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
@@ -16,6 +17,7 @@ class PlannedCashFlowFactory extends Factory
     public function definition(): array
     {
         return [
+            'user_id' => User::factory(),
             'name' => 'Paycheck',
             'amount_cents' => 260_000,
             'kind' => 'income',

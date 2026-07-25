@@ -6,6 +6,7 @@ use App\Enums\Bucket;
 use App\Enums\ReviewSource;
 use App\Enums\TransactionKind;
 use App\Models\Transaction;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
@@ -18,6 +19,7 @@ class TransactionFactory extends Factory
     public function definition(): array
     {
         return [
+            'user_id' => User::factory(),
             'account_id' => null,
             'merchant' => fake()->company(),
             'amount_cents' => fake()->numberBetween(500, 20_000),

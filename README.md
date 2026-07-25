@@ -1,8 +1,16 @@
 # ClearSpend — Dollarwise-inspired weekend POC
 
 ClearSpend is a desktop-first personal finance POC inspired by Dollarwise-style
-safe-to-spend forecasting and transaction review. A seeded synthetic persona
-(Jordan Lee) can:
+safe-to-spend forecasting and transaction review.
+
+A demo persona-selection flow with isolated synthetic financial datasets lets
+interviewers and testers choose between three seeded fictional users:
+
+1. **Alex Rivera** — Reckless Spender
+2. **Jordan Lee** — Average Spender
+3. **Morgan Chen** — High-Net-Worth Individual
+
+After selecting a persona, that user can:
 
 - See an explainable **safe-to-spend** forecast with breakdown, 50/30/20 progress,
   cash flows, account sync health, and recent activity
@@ -12,6 +20,7 @@ safe-to-spend forecasting and transaction review. A seeded synthetic persona
   seam (not a hosted LLM)
 - Manage **Activity** in a scannable table (search/filters, create/edit)
 - Maintain practical **categorization rules** for future Smart Review batches
+- Open a **Profile** screen to switch personas or reset only that persona’s demo data
 
 Stack:
 
@@ -19,19 +28,34 @@ Stack:
 - Backend: Laravel 13 JSON API + SQLite
 
 Money is stored as integer cents. Laravel is authoritative for financial totals;
-Vue formats and presents only. The API is public and stateless (no auth, no Plaid).
+Vue formats and presents only. There is **no production authentication** — the
+app uses a lightweight demo header (`X-Demo-User`) and browser `localStorage`
+selection. This is intentionally not secure auth.
 
 ## Routes (Vue)
 
 | Path | Purpose |
 |------|---------|
+| `/login` | Demo persona selection (public) |
 | `/` | Overview / safe-to-spend |
 | `/activity` | Transaction table |
 | `/review` | Categorization queue |
 | `/rules` | Rules CRUD |
+| `/profile` | Selected demo user profile, switch, reset |
+
+Protected routes require a selected demo user id in `localStorage`
+(`clearspend_demo_user_id`).
 
 ## API surface
 
+Public:
+
+- `GET /api/demo-users` — three persona cards (no financial detail beyond summary)
+
+Protected (require `X-Demo-User: <user id>`):
+
+- `GET /api/profile` — selected user identity and profile summary
+- `POST /api/profile/reset` — restore only the selected user’s seeded financial data
 - `GET /api/dashboard` — persona, safe-to-spend, plan, cash flows, accounts, recent txs
 - `GET /api/accounts`
 - `GET|POST /api/transactions`, `PATCH /api/transactions/{id}`
@@ -42,6 +66,8 @@ Vue formats and presents only. The API is public and stateless (no auth, no Plai
 Responses use Laravel Resource envelopes: `{ "data": ... }`.
 
 Buckets: `need`, `want`, `savings` (legacy `debt_savings` / `category` aliases still accepted on patch).
+
+The `X-Demo-User` header is a demo tenancy selector, not a security boundary.
 
 ## 1. Required software
 
@@ -80,7 +106,8 @@ php artisan key:generate         # if needed
 php artisan migrate:fresh --seed
 ```
 
-Seeds Jordan Lee’s accounts, 50/30/20 plan, cash flows, rules, and mixed reviewed/unreviewed transactions.
+Seeds three isolated demo personas with distinct plans, accounts, cash flows,
+rules, and reviewed/unreviewed transactions.
 
 ## 4. Run locally
 
@@ -93,6 +120,7 @@ cd frontend && npm run dev
 ```
 
 Vite proxies `/api` to `http://127.0.0.1:8000`. Open the Vite URL (usually `http://127.0.0.1:5173`).
+Choose a demo profile on `/login`, then explore Overview / Activity / Review / Rules / Profile.
 
 ## 5. Quality gates
 
@@ -111,7 +139,7 @@ cd frontend && npm run typecheck && npm run test && npm run build
 
 Smart Review auto-applies **high-confidence** matches from:
 
-1. Enabled DB rules (lower `priority` wins)
+1. Enabled DB rules for the selected user (lower `priority` wins)
 2. Local merchant/kind heuristics
 
 Uncertain merchants stay in the review queue with explanations. The

@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Enums\Bucket;
+use App\Support\DemoUserContext;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -19,10 +20,16 @@ class StoreCategorizationRuleRequest extends FormRequest
      */
     public function rules(): array
     {
+        $userId = app(DemoUserContext::class)->id();
+
         return [
             'name' => ['required', 'string', 'max:120'],
             'merchant_contains' => ['required', 'string', 'max:120'],
-            'account_id' => ['nullable', 'integer', 'exists:accounts,id'],
+            'account_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('accounts', 'id')->where(fn ($query) => $query->where('user_id', $userId)),
+            ],
             'amount_cents_min' => ['nullable', 'integer', 'min:0'],
             'amount_cents_max' => ['nullable', 'integer', 'min:0', 'gte:amount_cents_min'],
             'target_bucket' => ['required', Rule::enum(Bucket::class)],

@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Contracts\TransactionCategorizer;
 use App\Models\Transaction;
+use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -23,18 +24,18 @@ final class SmartReviewService
      *   batch_key: string
      * }
      */
-    public function run(?string $batchKey = null): array
+    public function run(User $user, ?string $batchKey = null): array
     {
         $batchKey ??= (string) Str::uuid();
 
-        return DB::transaction(function () use ($batchKey) {
+        return DB::transaction(function () use ($user, $batchKey) {
             $applied = [];
             $skipped = [];
             $appliedIds = [];
 
-            // Retry-safe: reconstruct prior applied rows for this batch key.
             $priorApplied = Transaction::query()
-                ->where('idempotency_key', 'like', "smart-review:{$batchKey}:%")
+                ->forUser($user)
+                ->where('idempotency_key', 'like', "smart-review:{$user->id}:{$batchKey}:%")
                 ->orderBy('transaction_date')
                 ->orderBy('id')
                 ->lockForUpdate()
@@ -46,6 +47,7 @@ final class SmartReviewService
             }
 
             $transactions = Transaction::query()
+                ->forUser($user)
                 ->unreviewed()
                 ->orderBy('transaction_date')
                 ->orderBy('id')
@@ -72,7 +74,7 @@ final class SmartReviewService
                     continue;
                 }
 
-                $idempotencyKey = "smart-review:{$batchKey}:{$transaction->id}";
+                $idempotencyKey = "smart-review:{$user->id}:{$batchKey}:{$transaction->id}";
 
                 if ($result->bucket === null) {
                     continue;

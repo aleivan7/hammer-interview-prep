@@ -4,6 +4,7 @@ namespace Database\Factories;
 
 use App\Enums\AccountSyncStatus;
 use App\Models\Account;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
@@ -16,6 +17,7 @@ class AccountFactory extends Factory
     public function definition(): array
     {
         return [
+            'user_id' => User::factory(),
             'institution_name' => fake()->company(),
             'name' => 'Checking',
             'mask' => (string) fake()->numerify('####'),

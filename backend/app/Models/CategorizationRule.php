@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\Bucket;
 use Database\Factories\CategorizationRuleFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -14,6 +15,7 @@ class CategorizationRule extends Model
     use HasFactory;
 
     protected $fillable = [
+        'user_id',
         'name',
         'merchant_contains',
         'account_id',
@@ -29,6 +31,7 @@ class CategorizationRule extends Model
     protected function casts(): array
     {
         return [
+            'user_id' => 'integer',
             'account_id' => 'integer',
             'amount_cents_min' => 'integer',
             'amount_cents_max' => 'integer',
@@ -39,8 +42,18 @@ class CategorizationRule extends Model
         ];
     }
 
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
+    }
+
     public function account(): BelongsTo
     {
         return $this->belongsTo(Account::class);
+    }
+
+    public function scopeForUser(Builder $query, User $user): Builder
+    {
+        return $query->where('user_id', $user->id);
     }
 }

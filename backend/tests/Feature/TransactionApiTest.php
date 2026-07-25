@@ -3,7 +3,9 @@
 namespace Tests\Feature;
 
 use App\Enums\Bucket;
+use App\Models\Account;
 use App\Models\Transaction;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use PHPUnit\Framework\Attributes\TestDox;
 use Tests\TestCase;
@@ -15,15 +17,23 @@ class TransactionApiTest extends TestCase
 {
     use RefreshDatabase;
 
+    private User $user;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->user = $this->withDemoUser();
+    }
+
     #[TestDox('Index with unreviewed_only returns only transactions still awaiting review')]
     public function test_index_returns_only_unreviewed_transactions_when_requested(): void
     {
-        $unreviewed = Transaction::factory()->unreviewed()->create([
+        $unreviewed = Transaction::factory()->for($this->user)->unreviewed()->create([
             'merchant' => 'Unreviewed Store',
             'transaction_date' => '2026-07-10',
         ]);
 
-        Transaction::factory()->reviewed()->create([
+        Transaction::factory()->for($this->user)->reviewed()->create([
             'merchant' => 'Reviewed Store',
             'transaction_date' => '2026-07-09',
         ]);
@@ -41,12 +51,12 @@ class TransactionApiTest extends TestCase
     #[TestDox('Review queue index returns unreviewed transactions oldest-first')]
     public function test_index_returns_transactions_oldest_first_for_review_queue(): void
     {
-        $newer = Transaction::factory()->unreviewed()->create([
+        $newer = Transaction::factory()->for($this->user)->unreviewed()->create([
             'merchant' => 'Newer Merchant',
             'transaction_date' => '2026-07-20',
         ]);
 
-        $older = Transaction::factory()->unreviewed()->create([
+        $older = Transaction::factory()->for($this->user)->unreviewed()->create([
             'merchant' => 'Older Merchant',
             'transaction_date' => '2026-07-10',
         ]);
@@ -61,7 +71,7 @@ class TransactionApiTest extends TestCase
     #[TestDox('Patch with a valid category sets the transaction bucket')]
     public function test_patch_with_valid_category_updates_bucket(): void
     {
-        $transaction = Transaction::factory()->unreviewed()->create([
+        $transaction = Transaction::factory()->for($this->user)->unreviewed()->create([
             'bucket' => null,
         ]);
 
@@ -83,7 +93,7 @@ class TransactionApiTest extends TestCase
     #[TestDox('Patch with reviewed true stamps reviewed_at')]
     public function test_patch_with_reviewed_true_sets_reviewed_at(): void
     {
-        $transaction = Transaction::factory()->unreviewed()->create();
+        $transaction = Transaction::factory()->for($this->user)->unreviewed()->create();
 
         $response = $this->patchJson("/api/transactions/{$transaction->id}", [
             'category' => 'want',
@@ -100,7 +110,7 @@ class TransactionApiTest extends TestCase
     #[TestDox('Patch with reviewed false clears reviewed_at')]
     public function test_patch_with_reviewed_false_clears_reviewed_at(): void
     {
-        $transaction = Transaction::factory()->reviewed()->create([
+        $transaction = Transaction::factory()->for($this->user)->reviewed()->create([
             'bucket' => Bucket::Need,
         ]);
 
@@ -119,7 +129,7 @@ class TransactionApiTest extends TestCase
     #[TestDox('Patch with an unsupported category returns 422')]
     public function test_patch_with_unsupported_category_returns_422(): void
     {
-        $transaction = Transaction::factory()->unreviewed()->create();
+        $transaction = Transaction::factory()->for($this->user)->unreviewed()->create();
 
         $response = $this->patchJson("/api/transactions/{$transaction->id}", [
             'category' => 'entertainment',
@@ -133,7 +143,7 @@ class TransactionApiTest extends TestCase
     #[TestDox('Patch marking unreviewed (uncategorized) as reviewed without a bucket returns 422')]
     public function test_patch_with_missing_category_returns_422(): void
     {
-        $transaction = Transaction::factory()->unreviewed()->create();
+        $transaction = Transaction::factory()->for($this->user)->unreviewed()->create();
 
         $response = $this->patchJson("/api/transactions/{$transaction->id}", [
             'reviewed' => true,
@@ -145,7 +155,7 @@ class TransactionApiTest extends TestCase
     #[TestDox('Patch can mark a pre-categorized transaction reviewed without resending the bucket')]
     public function test_patch_can_review_a_pre_categorized_transaction_without_repeating_bucket(): void
     {
-        $transaction = Transaction::factory()->unreviewed()->create([
+        $transaction = Transaction::factory()->for($this->user)->unreviewed()->create([
             'bucket' => Bucket::Need,
         ]);
 
@@ -160,7 +170,7 @@ class TransactionApiTest extends TestCase
     #[TestDox('Patch response matches the Transaction resource JSON shape')]
     public function test_patch_returns_transaction_resource_json_shape(): void
     {
-        $transaction = Transaction::factory()->unreviewed()->create([
+        $transaction = Transaction::factory()->for($this->user)->unreviewed()->create([
             'merchant' => 'HEB',
             'amount_cents' => 8423,
             'transaction_date' => '2026-07-20',
@@ -211,6 +221,7 @@ class TransactionApiTest extends TestCase
         $this->assertDatabaseHas('transactions', [
             'merchant' => 'Corner Market',
             'amount_cents' => 1250,
+            'user_id' => $this->user->id,
         ]);
     }
 
@@ -231,7 +242,7 @@ class TransactionApiTest extends TestCase
     #[TestDox('Patch persists field edits when the transaction stays unreviewed')]
     public function test_patch_persists_edits_when_transaction_remains_unreviewed(): void
     {
-        $transaction = Transaction::factory()->unreviewed()->create([
+        $transaction = Transaction::factory()->for($this->user)->unreviewed()->create([
             'merchant' => 'Original Merchant',
         ]);
 
@@ -253,7 +264,7 @@ class TransactionApiTest extends TestCase
     #[TestDox('Patch persists field edits while clearing review state')]
     public function test_patch_persists_edits_while_undoing_review(): void
     {
-        $transaction = Transaction::factory()->reviewed()->create([
+        $transaction = Transaction::factory()->for($this->user)->reviewed()->create([
             'merchant' => 'Original Merchant',
             'bucket' => Bucket::Need,
         ]);
@@ -276,7 +287,7 @@ class TransactionApiTest extends TestCase
     #[TestDox('Patch updates merchant and bucket on an already-reviewed transaction')]
     public function test_patch_updates_an_already_reviewed_transaction(): void
     {
-        $transaction = Transaction::factory()->reviewed()->create([
+        $transaction = Transaction::factory()->for($this->user)->reviewed()->create([
             'merchant' => 'Original Merchant',
             'bucket' => Bucket::Need,
         ]);
@@ -301,7 +312,7 @@ class TransactionApiTest extends TestCase
     #[TestDox('Patch rejects clearing the bucket while the transaction remains reviewed')]
     public function test_patch_rejects_clearing_bucket_while_transaction_remains_reviewed(): void
     {
-        $transaction = Transaction::factory()->reviewed()->create([
+        $transaction = Transaction::factory()->for($this->user)->reviewed()->create([
             'bucket' => Bucket::Need,
         ]);
 
@@ -321,8 +332,8 @@ class TransactionApiTest extends TestCase
     #[TestDox('Patch accepts savings bucket and maps the legacy debt_savings category alias')]
     public function test_patch_accepts_savings_bucket_and_debt_savings_alias(): void
     {
-        $savings = Transaction::factory()->unreviewed()->create();
-        $legacy = Transaction::factory()->unreviewed()->create();
+        $savings = Transaction::factory()->for($this->user)->unreviewed()->create();
+        $legacy = Transaction::factory()->for($this->user)->unreviewed()->create();
 
         $this->patchJson("/api/transactions/{$savings->id}", [
             'bucket' => 'savings',
@@ -344,7 +355,7 @@ class TransactionApiTest extends TestCase
     #[TestDox('Undo endpoint clears review state on a reviewed transaction')]
     public function test_undo_endpoint_clears_review(): void
     {
-        $transaction = Transaction::factory()->reviewed()->create([
+        $transaction = Transaction::factory()->for($this->user)->reviewed()->create([
             'bucket' => Bucket::Want,
         ]);
 
@@ -356,5 +367,105 @@ class TransactionApiTest extends TestCase
             'id' => $transaction->id,
             'reviewed_at' => null,
         ]);
+    }
+
+    #[TestDox('Transaction listing belongs only to the selected user')]
+    public function test_transaction_listing_belongs_only_to_selected_user(): void
+    {
+        $other = User::factory()->reckless()->create();
+
+        Transaction::factory()->for($this->user)->unreviewed()->create([
+            'merchant' => 'Own Merchant',
+        ]);
+        Transaction::factory()->for($other)->unreviewed()->create([
+            'merchant' => 'Foreign Merchant',
+        ]);
+
+        $this->getJson('/api/transactions?paginate=false')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.merchant', 'Own Merchant');
+    }
+
+    #[TestDox('A user cannot update another user’s transaction')]
+    public function test_user_cannot_update_another_users_transaction(): void
+    {
+        $other = User::factory()->reckless()->create();
+        $foreign = Transaction::factory()->for($other)->unreviewed()->create([
+            'merchant' => 'Foreign Merchant',
+        ]);
+
+        $this->patchJson("/api/transactions/{$foreign->id}", [
+            'merchant' => 'Hijacked',
+            'reviewed' => false,
+        ])->assertForbidden();
+
+        $this->assertDatabaseHas('transactions', [
+            'id' => $foreign->id,
+            'merchant' => 'Foreign Merchant',
+        ]);
+    }
+
+    #[TestDox('A user cannot undo another user’s transaction')]
+    public function test_user_cannot_undo_another_users_transaction(): void
+    {
+        $other = User::factory()->reckless()->create();
+        $foreign = Transaction::factory()->for($other)->reviewed()->create([
+            'bucket' => Bucket::Want,
+        ]);
+
+        $this->postJson("/api/transactions/{$foreign->id}/undo")->assertNotFound();
+
+        $this->assertNotNull($foreign->fresh()->reviewed_at);
+    }
+
+    #[TestDox('A user cannot access another user’s transaction suggestion')]
+    public function test_user_cannot_access_another_users_suggestion(): void
+    {
+        $other = User::factory()->reckless()->create();
+        $foreign = Transaction::factory()->for($other)->unreviewed()->create([
+            'merchant' => 'Netflix',
+        ]);
+
+        $this->getJson("/api/transactions/{$foreign->id}/suggestion")->assertNotFound();
+    }
+
+    #[TestDox('Creating a transaction assigns the selected user')]
+    public function test_creating_a_transaction_assigns_selected_user(): void
+    {
+        $account = Account::factory()->for($this->user)->create();
+
+        $this->postJson('/api/transactions', [
+            'merchant' => 'Owned Create',
+            'amount_cents' => 2500,
+            'kind' => 'expense',
+            'transaction_date' => '2026-07-22',
+            'account_id' => $account->id,
+        ])
+            ->assertCreated()
+            ->assertJsonPath('data.merchant', 'Owned Create');
+
+        $this->assertDatabaseHas('transactions', [
+            'merchant' => 'Owned Create',
+            'user_id' => $this->user->id,
+            'account_id' => $account->id,
+        ]);
+    }
+
+    #[TestDox('Creating a transaction rejects another user’s account')]
+    public function test_creating_a_transaction_rejects_foreign_account(): void
+    {
+        $other = User::factory()->reckless()->create();
+        $foreignAccount = Account::factory()->for($other)->create();
+
+        $this->postJson('/api/transactions', [
+            'merchant' => 'Bad Account',
+            'amount_cents' => 2500,
+            'kind' => 'expense',
+            'transaction_date' => '2026-07-22',
+            'account_id' => $foreignAccount->id,
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['account_id']);
     }
 }

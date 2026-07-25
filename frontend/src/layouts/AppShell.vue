@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { RouterLink, RouterView, useRoute } from 'vue-router'
 import AppIcon, { type IconName } from '../components/ui/AppIcon.vue'
+import { useDemoUser } from '../composables/useDemoUser'
 
 const route = useRoute()
+const { profile, selectedUserId, sessionRevision, ensureProfile } = useDemoUser()
 
 const links: Array<{ to: string; label: string; exact: boolean; icon: IconName }> = [
   { to: '/', label: 'Overview', exact: true, icon: 'dashboard' },
@@ -20,7 +22,17 @@ function isActive(path: string, exact: boolean): boolean {
   return route.path === path || route.path.startsWith(`${path}/`)
 }
 
-const routeKey = computed(() => String(route.name ?? route.path))
+const routeKey = computed(
+  () => `${String(route.name ?? route.path)}:${selectedUserId.value ?? 'none'}:${sessionRevision.value}`,
+)
+
+const initials = computed(() => profile.value?.avatar_initials ?? 'CS')
+const displayName = computed(() => profile.value?.name ?? 'Demo user')
+const personaLabel = computed(() => profile.value?.persona_label ?? 'Demo persona')
+
+onMounted(() => {
+  void ensureProfile()
+})
 </script>
 
 <template>
@@ -57,13 +69,18 @@ const routeKey = computed(() => String(route.name ?? route.path))
           <p class="premium-sub">All features unlocked</p>
         </div>
 
-        <div class="persona">
-          <span class="avatar" aria-hidden="true">JL</span>
+        <RouterLink
+          to="/profile"
+          class="persona"
+          :class="{ active: isActive('/profile', true) }"
+          :aria-current="isActive('/profile', true) ? 'page' : undefined"
+        >
+          <span class="avatar" aria-hidden="true">{{ initials }}</span>
           <div>
-            <p class="persona-name">Jordan Lee</p>
-            <p class="persona-role">Demo persona</p>
+            <p class="persona-name">{{ displayName }}</p>
+            <p class="persona-role">{{ personaLabel }}</p>
           </div>
-        </div>
+        </RouterLink>
       </div>
     </aside>
 
@@ -73,7 +90,14 @@ const routeKey = computed(() => String(route.name ?? route.path))
           <span class="brand-mark" aria-hidden="true">C</span>
           <span class="brand-name">ClearSpend</span>
         </div>
-        <span class="avatar" aria-hidden="true">JL</span>
+        <RouterLink
+          to="/profile"
+          class="avatar-link"
+          aria-label="Open profile"
+          :aria-current="isActive('/profile', true) ? 'page' : undefined"
+        >
+          <span class="avatar" aria-hidden="true">{{ initials }}</span>
+        </RouterLink>
       </header>
 
       <nav class="mobile-nav" aria-label="Mobile">
@@ -218,7 +242,29 @@ const routeKey = computed(() => String(route.name ?? route.path))
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  padding: 0 var(--space-2);
+  padding: 0.55rem 0.75rem;
+  border-radius: var(--radius-sm);
+  color: inherit;
+  text-decoration: none;
+  transition:
+    background 160ms ease,
+    color 160ms ease;
+}
+
+.persona:hover,
+.persona:focus-visible,
+.persona.active {
+  background: var(--bg-hover);
+}
+
+.avatar-link {
+  display: inline-flex;
+  border-radius: var(--radius-pill);
+}
+
+.avatar-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .avatar {
