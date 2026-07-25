@@ -2,10 +2,13 @@ import type { Transaction } from '../types/transaction'
 import { BUCKET_LABELS } from '../types/bucket'
 
 function escapeCell(value: string): string {
-  if (/[",\n]/.test(value)) {
-    return `"${value.replaceAll('"', '""')}"`
+  // Neutralize spreadsheet formula injection (=, +, -, @, tab/CR).
+  const safe = /^[=+\-@\t\r]/.test(value) ? `'${value}` : value
+
+  if (/[",\n]/.test(safe)) {
+    return `"${safe.replaceAll('"', '""')}"`
   }
-  return value
+  return safe
 }
 
 export function downloadTransactionsCsv(transactions: Transaction[]): void {

@@ -35,7 +35,7 @@ export function aggregateBucketSpend(transactions: Transaction[]): BucketSpend[]
   const totals: Record<Bucket, number> = { need: 0, want: 0, savings: 0 }
 
   for (const tx of transactions) {
-    if (!tx.bucket || tx.kind === 'income' || tx.kind === 'refund') {
+    if (!tx.bucket || tx.kind === 'income' || tx.kind === 'refund' || tx.kind === 'transfer') {
       continue
     }
     totals[tx.bucket] += Math.abs(tx.amount_cents)
@@ -59,10 +59,14 @@ export function summarizeCashFlow(transactions: Transaction[]): {
   let expenseCents = 0
 
   for (const tx of transactions) {
+    if (tx.kind === 'transfer') {
+      continue
+    }
+
     const signed = signedAmountCents(tx)
     if (signed > 0) {
       incomeCents += signed
-    } else {
+    } else if (signed < 0) {
       expenseCents += Math.abs(signed)
     }
   }

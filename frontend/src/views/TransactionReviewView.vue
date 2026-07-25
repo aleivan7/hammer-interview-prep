@@ -151,12 +151,15 @@ async function undo(): Promise<void> {
 }
 
 function skip(): void {
-  if (!currentTransaction.value) {
+  const current = currentTransaction.value
+  if (!current || transactions.value.length <= 1) {
     return
   }
-  if (currentIndex.value < transactions.value.length - 1) {
-    currentIndex.value += 1
-  }
+
+  // Rotate the current card to the end so skip never falsely completes the queue.
+  const before = transactions.value.slice(0, currentIndex.value)
+  const after = transactions.value.slice(currentIndex.value + 1)
+  transactions.value = [...before, ...after, current]
 }
 
 async function categorizeSelected(bucket: Bucket): Promise<void> {
@@ -169,6 +172,7 @@ async function categorizeSelected(bucket: Bucket): Promise<void> {
   bulkStatus.value = null
 
   const ids = [...selectedIds.value]
+  const currentId = currentTransaction.value?.id ?? null
   const results = await Promise.allSettled(
     ids.map((id) => updateTransaction(id, { bucket, reviewed: true })),
   )
@@ -186,10 +190,24 @@ async function categorizeSelected(bucket: Bucket): Promise<void> {
 
   if (fulfilled.length) {
     const done = new Set(fulfilled)
+    const removedBeforeCurrent = transactions.value
+      .slice(0, currentIndex.value)
+      .filter((tx) => done.has(tx.id)).length
+
     transactions.value = transactions.value.filter((tx) => !done.has(tx.id))
-    if (currentIndex.value >= transactions.value.length) {
-      currentIndex.value = Math.max(0, transactions.value.length - 1)
+
+    if (currentId != null && done.has(currentId)) {
+      currentIndex.value = Math.min(
+        currentIndex.value,
+        Math.max(0, transactions.value.length - 1),
+      )
+    } else {
+      currentIndex.value = Math.max(0, currentIndex.value - removedBeforeCurrent)
+      if (currentIndex.value >= transactions.value.length) {
+        currentIndex.value = Math.max(0, transactions.value.length - 1)
+      }
     }
+
     selectedIds.value = []
     bulkUndoIds.value = fulfilled
     bulkStatus.value = `Categorized ${fulfilled.length}${failed ? `, ${failed} failed` : ''}.`
@@ -206,9 +224,23 @@ async function undoBulk(): Promise<void> {
   }
 
   updating.value = true
-  await loadTransactions()
+  updateError.value = null
+
+  const ids = [...bulkUndoIds.value]
+  let restored = 0
+
+  for (const id of ids) {
+    try {
+      await undoTransactionReview(id)
+      restored += 1
+    } catch {
+      // Keep undoing remaining ids.
+    }
+  }
+
   bulkUndoIds.value = []
-  bulkStatus.value = null
+  bulkStatus.value = restored ? `Undid ${restored}.` : 'Could not undo bulk categorization.'
+  await loadTransactions()
   updating.value = false
 }
 
