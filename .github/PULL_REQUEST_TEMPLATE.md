@@ -23,10 +23,11 @@
 **Rollback notes:**
 
 ## Test plan
-- [ ] Narrow relevant tests run locally
-- [ ] `./scripts/verify.sh` passed locally
+- [ ] Narrow relevant tests run (locally or by automation — paste commands below)
+- [ ] `./scripts/verify.sh` passed locally **or** CI verify job is green
 - [ ] Manual check at desktop / tablet / mobile widths (if UI)
 - [ ] Keyboard-only path checked (if interactive UI)
+- [ ] Automation-authored PR (skip manual UI checks if not applicable)
 
 **Commands and outcomes:**
 

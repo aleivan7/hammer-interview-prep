@@ -27,8 +27,26 @@ verification, and bounded Ralph iterations. Human review remains the final gate.
    - Cursor Bugbot with fail-on-unresolved when available;
    - an independent security-review agent pass recorded in the PR;
    - explicit human authorization before squash-merge to `main`.
-8. Review `git status` and the diff. The user decides whether to commit, push,
-   open a pull request, merge, or deploy. See [`CONTRIBUTING.md`](../CONTRIBUTING.md).
+8. Review `git status` and the diff. Interactive agents: the user decides
+   whether to commit, push, open a pull request, merge, or deploy. See
+   [`CONTRIBUTING.md`](../CONTRIBUTING.md).
+
+## Cursor Automations
+
+Approved cloud automations operate under their configured prompts, not
+per-message chat approval. Named automations and scopes live in
+[`AGENTS.md`](../AGENTS.md):
+
+- **Add test coverage** and **Generate docs** may create a short-lived
+  `test/*` or `docs/*` branch, commit, push, and open or update a PR.
+- **Summarize changes daily** is Git/GitHub read-only and may post only to its
+  configured destination.
+- No automation may merge, deploy, force-push, skip hooks, commit secrets, or
+  access production.
+- Automations run narrow/relevant checks and record evidence in the PR;
+  `./scripts/verify.sh` on CI is the merge gate.
+- Interactive chat agents and Ralph CLI still follow the supervised workflow
+  above. Ralph remains no-push.
 
 ## Installed capabilities
 

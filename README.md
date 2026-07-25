@@ -124,4 +124,7 @@ this POC does **not** call a hosted LLM.
 - Implementation plan: [`docs/specs/clearspend-plan.md`](docs/specs/clearspend-plan.md)
 - AI delivery workflow: [`docs/ai-workflow.md`](docs/ai-workflow.md)
 
-Commits, pushes, merges, and deploys require an explicit human decision.
+Interactive development: commits, pushes, merges, and deploys require an
+explicit human decision. Repository-approved Cursor Automations may push
+branches and open PRs as scoped in [`AGENTS.md`](AGENTS.md); merge and deploy
+still require explicit human approval.

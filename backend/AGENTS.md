@@ -44,7 +44,9 @@ This project has domain-specific skills available in `**/skills/**`. You MUST ac
 
 ## Documentation Files
 
-- You must only create documentation files if explicitly requested by the user.
+- Interactive agents must only create documentation files when explicitly
+  requested. The repository-approved **Generate docs** Cursor Automation may
+  update developer documentation under `docs/` and related README/AGENTS files.
 
 ## Replies
 
@@ -156,7 +158,9 @@ This project has domain-specific skills available in `**/skills/**`. You MUST ac
 - This application uses PHPUnit for testing. All tests must be written as PHPUnit classes. Use `php artisan make:test --phpunit {name}` to create a new test.
 - If you see a test using "Pest", convert it to PHPUnit.
 - Every time a test has been updated, run that singular test.
-- When the tests relating to your feature are passing, ask the user if they would like to also run the entire test suite to make sure everything is still passing.
+- Automations and interactive agents: run the minimal tests for the change.
+  Interactive agents may offer to run the full suite; automations defer the
+  full gate to CI unless the automation task explicitly requires it.
 - Tests should cover all happy paths, failure paths, and edge cases.
 - You must not remove any tests or test files from the tests directory without approval. These are not temporary or helper files; these are core to the application.
 
