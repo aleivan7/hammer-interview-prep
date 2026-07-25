@@ -5,8 +5,8 @@ alwaysApply: true
 
 # Delivery workflow
 
-- For nontrivial work, state the user-visible goal, acceptance criteria,
-  constraints, and non-goals before editing.
+- For nontrivial interactive work, state the user-visible goal, acceptance
+  criteria, constraints, and non-goals before editing.
 - Inspect existing code, tests, rules, skills, and relevant MCP tools before
   assuming behavior is missing.
 - Keep changes narrowly scoped; record adjacent issues instead of silently
@@ -14,9 +14,17 @@ alwaysApply: true
 - Use Laravel Boost for version-aware Laravel documentation and application
   inspection when relevant.
 - Prefer tests that assert externally observable behavior.
-- Run the narrowest relevant check while iterating and `./scripts/verify.sh`
-  before completion.
+- Interactive agents: run the narrowest relevant check while iterating and
+  `./scripts/verify.sh` before completion.
+- Approved Cursor Automations named in `AGENTS.md` (**Add test coverage**,
+  **Generate docs**): run scoped checks, record results in the PR, and treat CI
+  failures on the automation PR as blockers. **Summarize changes daily** is
+  Git/GitHub read-only.
 - Treat test, lint, type, build, route, or migration failures as blockers unless
-  they are proven pre-existing and reported clearly.
-- Do not commit, push, merge, deploy, access production, or install/authenticate
-  tools without explicit user approval.
+  they are proven pre-existing and reported clearly. Report automation failures;
+  do not bypass quality gates.
+- Repository-approved Cursor Automations may commit, push, and open/update PRs
+  as scoped in `AGENTS.md`. All other agents: do not commit, push, merge,
+  deploy, access production, or install/authenticate tools without explicit
+  user approval. No agent or automation may merge, deploy, force-push, skip
+  hooks, or access production without a separate explicit human decision.

@@ -10,6 +10,7 @@ This repository uses **GitHub Flow** (trunk-based):
   - `fix/<short-name>`
   - `chore/<short-name>`
   - `docs/<short-name>`
+  - `test/<short-name>` (automation or test-only PRs)
 - Open a pull request early, keep it small, and squash-merge into `main`.
 - Delete the branch after merge.
 - Do **not** maintain a permanent `dev` branch.
@@ -22,6 +23,22 @@ This repository uses **GitHub Flow** (trunk-based):
 
 Run the narrowest relevant test while iterating, then the full gate before asking
 for review.
+
+### Automation-authored pull requests
+
+PRs opened by the repository-approved Cursor Automations (**Add test coverage**,
+**Generate docs**) follow the same merge gates. Those automations may create a
+`test/*` or `docs/*` branch, commit, push, and open or update a PR when their
+run produces a useful change. They must:
+
+1. Run the narrowest relevant tests for the diff.
+2. Paste command output in the PR test plan.
+3. Rely on green CI (`./scripts/verify.sh` in GitHub Actions) for the full gate
+   when the automation environment cannot mirror a local workstation.
+
+**Summarize changes daily** is Git/GitHub read-only. No automation may merge,
+deploy, force-push, skip hooks, or access production. Ralph CLI iterations
+remain no-push.
 
 ## Repository security settings
 
@@ -42,7 +59,8 @@ Use the PR template. Every PR should include:
 1. Scope and non-goals
 2. Linked durable spec/task when applicable (`docs/specs/`)
 3. Financial-data impact notes when money math or categorization changes
-4. Test evidence (`./scripts/verify.sh` outcome)
+4. Test evidence (narrow automation/local commands and/or green CI
+   `./scripts/verify.sh`)
 5. Two AI review passes before human merge approval:
    - Cursor Bugbot on the PR
    - Independent security-review agent; paste the outcome into the PR
