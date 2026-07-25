@@ -57,7 +57,10 @@ function onCardCategorize(bucket: Bucket): void {
 }
 
 function onKeydown(event: KeyboardEvent): void {
-  if (event.key === 'Escape' && !props.updating) {
+  if (event.key === 'Escape') {
+    if (busy.value) {
+      return
+    }
     event.preventDefault()
     emit('close')
     return
