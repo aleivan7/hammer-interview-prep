@@ -86,4 +86,22 @@ describe('apiFetch', () => {
     expect(getSelectedDemoUserId()).toBeNull()
     expect(localStorage.getItem(DEMO_USER_STORAGE_KEY)).toBeNull()
   })
+
+  it('clears the selected id when the API requires a demo user', async () => {
+    setSelectedDemoUserId(4)
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(JSON.stringify({ message: 'Required', code: 'demo_user_required' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    )
+
+    await expect(apiFetch('/api/dashboard')).rejects.toMatchObject({
+      name: 'ApiError',
+      status: 401,
+      code: 'demo_user_required',
+    })
+    expect(getSelectedDemoUserId()).toBeNull()
+    expect(localStorage.getItem(DEMO_USER_STORAGE_KEY)).toBeNull()
+  })
 })

@@ -104,3 +104,11 @@ export function useDemoUser() {
     resetCurrentDemoData,
   }
 }
+
+/** Test helper — resets module-level profile request state. */
+export function __resetUseDemoUserForTests(): void {
+  loading.value = false
+  error.value = null
+  profileRequest = null
+  validatedForId = null
+}

@@ -34,4 +34,12 @@ describe('demoUserSession', () => {
     __resetDemoUserSessionForTests()
     expect(getSelectedDemoUserId()).toBe(12)
   })
+
+  it('ignores invalid stored demo user ids', () => {
+    for (const raw of ['0', '-3', 'abc', '']) {
+      localStorage.setItem(DEMO_USER_STORAGE_KEY, raw)
+      __resetDemoUserSessionForTests()
+      expect(getSelectedDemoUserId()).toBeNull()
+    }
+  })
 })
