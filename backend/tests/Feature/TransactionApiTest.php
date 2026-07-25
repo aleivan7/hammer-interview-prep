@@ -131,6 +131,20 @@ class TransactionApiTest extends TestCase
         $response->assertStatus(422);
     }
 
+    public function test_patch_can_review_a_pre_categorized_transaction_without_repeating_bucket(): void
+    {
+        $transaction = Transaction::factory()->unreviewed()->create([
+            'bucket' => Bucket::Need,
+        ]);
+
+        $this->patchJson("/api/transactions/{$transaction->id}", [
+            'reviewed' => true,
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.bucket', 'need')
+            ->assertJsonPath('data.reviewed', true);
+    }
+
     public function test_patch_returns_transaction_resource_json_shape(): void
     {
         $transaction = Transaction::factory()->unreviewed()->create([

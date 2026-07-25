@@ -4,6 +4,7 @@ namespace App\Http\Requests;
 
 use App\Enums\Bucket;
 use App\Enums\TransactionKind;
+use App\Models\Transaction;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -41,7 +42,7 @@ class UpdateTransactionRequest extends FormRequest
             'amount_cents' => ['sometimes', 'integer', 'min:0', 'max:100000000'],
             'kind' => ['sometimes', Rule::enum(TransactionKind::class)],
             'bucket' => [
-                Rule::requiredIf(fn () => $this->boolean('reviewed') === true && ! $this->filled('category')),
+                Rule::requiredIf(fn () => $this->requiresReviewBucket() && ! $this->filled('category')),
                 'nullable',
                 Rule::enum(Bucket::class),
             ],
@@ -51,9 +52,20 @@ class UpdateTransactionRequest extends FormRequest
             'notes' => ['sometimes', 'nullable', 'string', 'max:1000'],
             'reviewed' => ['sometimes', 'boolean'],
             'category' => [
-                Rule::requiredIf(fn () => $this->boolean('reviewed') === true && ! $this->filled('bucket')),
+                Rule::requiredIf(fn () => $this->requiresReviewBucket() && ! $this->filled('bucket')),
                 Rule::in([...Bucket::values(), 'debt_savings']),
             ],
         ];
+    }
+
+    private function requiresReviewBucket(): bool
+    {
+        if (! $this->boolean('reviewed')) {
+            return false;
+        }
+
+        $transaction = $this->route('transaction');
+
+        return ! $transaction instanceof Transaction || $transaction->bucket === null;
     }
 }
