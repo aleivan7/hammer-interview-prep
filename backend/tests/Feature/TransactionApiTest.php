@@ -468,4 +468,27 @@ class TransactionApiTest extends TestCase
             ->assertUnprocessable()
             ->assertJsonValidationErrors(['account_id']);
     }
+
+    #[TestDox('Updating a transaction rejects another user’s account')]
+    public function test_updating_a_transaction_rejects_foreign_account(): void
+    {
+        $other = User::factory()->reckless()->create();
+        $ownAccount = Account::factory()->for($this->user)->create();
+        $foreignAccount = Account::factory()->for($other)->create();
+        $transaction = Transaction::factory()->for($this->user)->unreviewed()->create([
+            'account_id' => $ownAccount->id,
+        ]);
+
+        $this->patchJson("/api/transactions/{$transaction->id}", [
+            'account_id' => $foreignAccount->id,
+            'reviewed' => false,
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['account_id']);
+
+        $this->assertDatabaseHas('transactions', [
+            'id' => $transaction->id,
+            'account_id' => $ownAccount->id,
+        ]);
+    }
 }

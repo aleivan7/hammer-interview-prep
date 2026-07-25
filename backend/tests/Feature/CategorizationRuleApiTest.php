@@ -154,4 +154,82 @@ class CategorizationRuleApiTest extends TestCase
             'user_id' => $this->user->id,
         ]);
     }
+
+    #[TestDox('A user cannot update another user’s categorization rule')]
+    public function test_user_cannot_update_another_users_rule(): void
+    {
+        $other = User::factory()->reckless()->create();
+        $foreign = CategorizationRule::factory()->for($other)->create([
+            'name' => 'Foreign rule',
+            'merchant_contains' => 'foreign',
+            'enabled' => true,
+        ]);
+
+        $this->patchJson("/api/rules/{$foreign->id}", [
+            'enabled' => false,
+            'name' => 'Hijacked',
+        ])->assertForbidden();
+
+        $this->assertDatabaseHas('categorization_rules', [
+            'id' => $foreign->id,
+            'name' => 'Foreign rule',
+            'enabled' => true,
+            'user_id' => $other->id,
+        ]);
+    }
+
+    #[TestDox('A user cannot delete another user’s categorization rule')]
+    public function test_user_cannot_delete_another_users_rule(): void
+    {
+        $other = User::factory()->reckless()->create();
+        $foreign = CategorizationRule::factory()->for($other)->create([
+            'name' => 'Foreign keep',
+            'merchant_contains' => 'keep',
+        ]);
+
+        $this->deleteJson("/api/rules/{$foreign->id}")->assertNotFound();
+
+        $this->assertDatabaseHas('categorization_rules', [
+            'id' => $foreign->id,
+            'name' => 'Foreign keep',
+            'user_id' => $other->id,
+        ]);
+    }
+
+    #[TestDox('Creating a rule rejects another user’s account')]
+    public function test_creating_a_rule_rejects_foreign_account(): void
+    {
+        $other = User::factory()->reckless()->create();
+        $foreignAccount = Account::factory()->for($other)->create();
+
+        $this->postJson('/api/rules', [
+            'name' => 'Bad account rule',
+            'merchant_contains' => 'coffee',
+            'target_bucket' => 'want',
+            'account_id' => $foreignAccount->id,
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['account_id']);
+    }
+
+    #[TestDox('Updating a rule rejects another user’s account')]
+    public function test_updating_a_rule_rejects_foreign_account(): void
+    {
+        $other = User::factory()->reckless()->create();
+        $foreignAccount = Account::factory()->for($other)->create();
+        $rule = CategorizationRule::factory()->for($this->user)->create([
+            'account_id' => null,
+        ]);
+
+        $this->patchJson("/api/rules/{$rule->id}", [
+            'account_id' => $foreignAccount->id,
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['account_id']);
+
+        $this->assertDatabaseHas('categorization_rules', [
+            'id' => $rule->id,
+            'account_id' => null,
+        ]);
+    }
 }
