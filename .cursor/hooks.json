@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "hooks": {
+    "beforeShellExecution": [
+      {
+        "command": "python3 .cursor/hooks/shell-safety.py",
+        "failClosed": true,
+        "timeout": 5
+      }
+    ],
+    "beforeMCPExecution": [
+      {
+        "command": "python3 .cursor/hooks/mcp-safety.py",
+        "failClosed": true,
+        "timeout": 5
+      }
+    ]
+  }
+}

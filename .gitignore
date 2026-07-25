@@ -1,6 +1,9 @@
 # Local PHP SQLite modules used only when the system package is missing
 .php-ext/
 
+# Local Ralph worktrees and run logs
+.ralph/
+
 # OS / editor
 .DS_Store
 *.log

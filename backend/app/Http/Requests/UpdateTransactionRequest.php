@@ -24,18 +24,6 @@ class UpdateTransactionRequest extends FormRequest
      */
     public function rules(): array
     {
-        /*
-         * TODO (Alejandro): Add validation rules for this request.
-         *
-         * Requirements:
-         * - category is required and must be one of: need, want, debt_savings
-         * - reviewed is required and must be a boolean
-         *
-         * Look up Laravel Form Request validation and the "in" / "boolean" rules.
-         *
-         * Do not paste a finished solution under this comment.
-         * An empty rules array is only a temporary placeholder.
-         */
         return [
             'category' => ['required', Rule::in(['need', 'want', 'debt_savings'])],
             'reviewed' => ['required', 'boolean'],

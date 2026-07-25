@@ -7,8 +7,10 @@
 .phpunit.result.cache
 /.codex
 /.cursor/
+/.claude/
 /.idea
 /.nova
+/.pi/
 /.phpunit.cache
 /.vscode
 /.zed
