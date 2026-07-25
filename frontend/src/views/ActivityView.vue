@@ -75,11 +75,10 @@ async function handleSubmit(payload: {
         kind: payload.kind,
         transaction_date: payload.transaction_date,
         account_id: payload.account_id,
-        bucket: payload.bucket ?? undefined,
+        bucket: payload.bucket,
         subcategory: payload.subcategory,
         notes: payload.notes,
         reviewed: payload.reviewed,
-        ...(payload.reviewed ? { bucket: payload.bucket ?? undefined } : {}),
       })
     } else {
       await createTransaction(payload)

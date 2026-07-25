@@ -60,11 +60,22 @@ class UpdateTransactionRequest extends FormRequest
 
     private function requiresReviewBucket(): bool
     {
-        if (! $this->boolean('reviewed')) {
+        $transaction = $this->route('transaction');
+        $willBeReviewed = $this->exists('reviewed')
+            ? $this->boolean('reviewed')
+            : $transaction instanceof Transaction && $transaction->isReviewed();
+
+        if (! $willBeReviewed) {
             return false;
         }
 
-        $transaction = $this->route('transaction');
+        if ($this->filled('bucket') || $this->filled('category')) {
+            return false;
+        }
+
+        if ($this->exists('bucket') || $this->exists('category')) {
+            return true;
+        }
 
         return ! $transaction instanceof Transaction || $transaction->bucket === null;
     }

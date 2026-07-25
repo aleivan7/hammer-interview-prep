@@ -33,7 +33,7 @@ export interface UpdateTransactionPayload {
   merchant?: string
   amount_cents?: number
   kind?: TransactionKind
-  bucket?: Bucket
+  bucket?: Bucket | null
   category?: Bucket | 'debt_savings'
   subcategory?: string | null
   transaction_date?: string

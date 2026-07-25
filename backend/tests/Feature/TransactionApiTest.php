@@ -280,6 +280,25 @@ class TransactionApiTest extends TestCase
         ]);
     }
 
+    public function test_patch_rejects_clearing_bucket_while_transaction_remains_reviewed(): void
+    {
+        $transaction = Transaction::factory()->reviewed()->create([
+            'bucket' => Bucket::Need,
+        ]);
+
+        $this->patchJson("/api/transactions/{$transaction->id}", [
+            'bucket' => null,
+            'reviewed' => true,
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['bucket']);
+
+        $this->assertDatabaseHas('transactions', [
+            'id' => $transaction->id,
+            'bucket' => 'need',
+        ]);
+    }
+
     public function test_patch_accepts_savings_bucket_and_debt_savings_alias(): void
     {
         $savings = Transaction::factory()->unreviewed()->create();
