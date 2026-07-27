@@ -175,4 +175,106 @@ class SmartReviewApiTest extends TestCase
             'reviewed_at' => null,
         ]);
     }
+
+    #[TestDox('Smart Review can re-apply after undo when the same batch key is reused')]
+    public function test_smart_review_reapplies_after_undo_with_same_batch_key(): void
+    {
+        CategorizationRule::factory()->for($this->user)->create([
+            'merchant_contains' => 'heb',
+            'target_bucket' => Bucket::Need,
+            'target_subcategory' => 'groceries',
+            'auto_review' => true,
+        ]);
+
+        $transaction = Transaction::factory()->for($this->user)->unreviewed()->create([
+            'merchant' => 'HEB Market',
+            'transaction_date' => '2026-07-12',
+        ]);
+
+        $this->postJson('/api/smart-review', ['batch_key' => 'retry-after-undo'])
+            ->assertOk()
+            ->assertJsonPath('data.applied_count', 1)
+            ->assertJsonPath('data.applied.0.id', $transaction->id);
+
+        $this->postJson("/api/transactions/{$transaction->id}/undo")
+            ->assertOk()
+            ->assertJsonPath('data.reviewed', false);
+
+        $this->assertDatabaseHas('transactions', [
+            'id' => $transaction->id,
+            'reviewed_at' => null,
+            'idempotency_key' => null,
+        ]);
+
+        $this->postJson('/api/smart-review', ['batch_key' => 'retry-after-undo'])
+            ->assertOk()
+            ->assertJsonPath('data.applied_count', 1)
+            ->assertJsonPath('data.applied.0.id', $transaction->id)
+            ->assertJsonPath('data.skipped_count', 0);
+
+        $this->assertDatabaseHas('transactions', [
+            'id' => $transaction->id,
+            'bucket' => 'need',
+            'idempotency_key' => 'smart-review:'.$this->user->id.':retry-after-undo:'.$transaction->id,
+        ]);
+        $this->assertNotNull($transaction->fresh()->reviewed_at);
+    }
+
+    #[TestDox('Suggestion and Smart Review ignore another user’s matching auto-review rules')]
+    public function test_foreign_user_rules_do_not_categorize_selected_user_transactions(): void
+    {
+        $other = User::factory()->reckless()->create();
+
+        CategorizationRule::factory()->for($other)->create([
+            'name' => 'Foreign boutique want',
+            'merchant_contains' => 'unique boutique xyz',
+            'target_bucket' => Bucket::Want,
+            'target_subcategory' => 'shopping',
+            'auto_review' => true,
+            'priority' => 1,
+        ]);
+
+        CategorizationRule::factory()->for($this->user)->create([
+            'name' => 'Own boutique need',
+            'merchant_contains' => 'unique boutique xyz',
+            'target_bucket' => Bucket::Need,
+            'target_subcategory' => 'household',
+            'auto_review' => true,
+            'priority' => 1,
+        ]);
+
+        $transaction = Transaction::factory()->for($this->user)->unreviewed()->create([
+            'merchant' => 'Unique Boutique XYZ',
+            'transaction_date' => '2026-07-14',
+        ]);
+
+        $this->getJson("/api/transactions/{$transaction->id}/suggestion")
+            ->assertOk()
+            ->assertJsonPath('data.source', 'rule')
+            ->assertJsonPath('data.bucket', 'need')
+            ->assertJsonPath('data.subcategory', 'household')
+            ->assertJsonPath('data.auto_review', true);
+
+        // Disable the owned rule so only the foreign rule remains as a candidate.
+        CategorizationRule::query()->forUser($this->user)->update(['enabled' => false]);
+
+        $this->getJson("/api/transactions/{$transaction->id}/suggestion")
+            ->assertOk()
+            ->assertJsonPath('data.source', 'heuristic')
+            ->assertJsonPath('data.bucket', null)
+            ->assertJsonPath('data.confidence', 0)
+            ->assertJsonPath('data.auto_review', false);
+
+        $this->postJson('/api/smart-review', ['batch_key' => 'foreign-rule-isolation'])
+            ->assertOk()
+            ->assertJsonPath('data.applied_count', 0)
+            ->assertJsonPath('data.skipped_count', 1)
+            ->assertJsonPath('data.skipped.0.id', $transaction->id);
+
+        $this->assertDatabaseHas('transactions', [
+            'id' => $transaction->id,
+            'reviewed_at' => null,
+            'bucket' => null,
+        ]);
+    }
 }

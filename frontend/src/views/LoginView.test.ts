@@ -202,4 +202,32 @@ describe('LoginView', () => {
 
     expect(router.currentRoute.value.fullPath).toBe('/activity')
   })
+
+  it.each([
+    ['//evil.com'],
+    ['https://evil.example/phish'],
+    ['activity'],
+  ])('rejects open redirect %s and falls back to overview', async (redirect) => {
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [
+        ...routes.filter((route) => route.name !== 'overview'),
+        { path: '/', name: 'overview', component: OverviewView, meta: { title: 'Overview', requiresDemoUser: true } },
+      ],
+    })
+    await router.push({ name: 'login', query: { redirect } })
+    await router.isReady()
+
+    const wrapper = mount(LoginView, {
+      global: { plugins: [router] },
+    })
+    await flushPromises()
+
+    const buttons = wrapper.findAll('button').filter((button) => button.text().includes('Continue as Jordan'))
+    await buttons[0].trigger('click')
+    await flushPromises()
+
+    expect(router.currentRoute.value.name).toBe('overview')
+    expect(router.currentRoute.value.fullPath).toBe('/')
+  })
 })

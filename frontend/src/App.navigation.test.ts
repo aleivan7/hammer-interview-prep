@@ -12,6 +12,7 @@ import { fetchProfile } from './api/profileApi'
 import { fetchReviewQueue, fetchTransactionSuggestion, fetchTransactions } from './api/transactionApi'
 import { fetchRules } from './api/rulesApi'
 import { createAppRouter, routes } from './router'
+import { __resetUseDemoUserForTests } from './composables/useDemoUser'
 import {
   DEMO_USER_STORAGE_KEY,
   __resetDemoUserSessionForTests,
@@ -86,6 +87,7 @@ const profile = {
 beforeEach(() => {
   localStorage.clear()
   __resetDemoUserSessionForTests()
+  __resetUseDemoUserForTests()
   setSelectedDemoUserId(2)
 
   vi.mocked(fetchProfile).mockResolvedValue(profile)
@@ -169,6 +171,19 @@ describe('App navigation shell', () => {
 
     expect(router.currentRoute.value.name).toBe('login')
     expect(localStorage.getItem(DEMO_USER_STORAGE_KEY)).toBeNull()
+  })
+
+  it('redirects to login with error=profile when profile loading throws a non-auth error', async () => {
+    vi.mocked(fetchProfile).mockRejectedValue(new Error('network down'))
+
+    const router = createAppRouter(createMemoryHistory())
+    await router.push('/activity')
+    await flushPromises()
+
+    expect(router.currentRoute.value.name).toBe('login')
+    expect(router.currentRoute.value.query.redirect).toBe('/activity')
+    expect(router.currentRoute.value.query.error).toBe('profile')
+    expect(localStorage.getItem(DEMO_USER_STORAGE_KEY)).toBe('2')
   })
 
   it('mounts overview, shows the selected persona, and navigates primary routes', async () => {
