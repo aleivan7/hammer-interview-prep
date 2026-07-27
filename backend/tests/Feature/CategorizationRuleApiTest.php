@@ -326,6 +326,32 @@ class CategorizationRuleApiTest extends TestCase
             ->assertJsonPath('data.merchant_contains', 'landlord llc');
     }
 
+    #[TestDox('Patch preserves custom merchant text until the merchant changes')]
+    public function test_patch_preserves_custom_merchant_text_until_merchant_changes(): void
+    {
+        $rule = CategorizationRule::factory()->for($this->user)->create([
+            'merchant_contains' => 'custom streaming text',
+            'merchant_id' => $this->netflix->id,
+            'category_id' => $this->entertainment->id,
+            'enabled' => true,
+        ]);
+
+        $this->patchJson("/api/rules/{$rule->id}", [
+            'enabled' => false,
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.enabled', false)
+            ->assertJsonPath('data.merchant_contains', 'custom streaming text');
+
+        $landlord = Merchant::query()->where('normalized_name', 'landlord llc')->firstOrFail();
+        $this->patchJson("/api/rules/{$rule->id}", [
+            'merchant_id' => $landlord->id,
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.merchant_id', $landlord->id)
+            ->assertJsonPath('data.merchant_contains', 'landlord llc');
+    }
+
     #[TestDox('A user cannot update another user’s categorization rule')]
     public function test_user_cannot_update_another_users_rule(): void
     {
