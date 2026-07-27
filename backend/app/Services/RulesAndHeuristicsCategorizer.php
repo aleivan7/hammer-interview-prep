@@ -56,6 +56,10 @@ final class RulesAndHeuristicsCategorizer implements TransactionCategorizer
                 continue;
             }
 
+            if ($rule->category_id !== null && ($rule->category === null || $rule->category->isArchived())) {
+                continue;
+            }
+
             $bucket = $rule->category?->bucket ?? $rule->target_bucket;
             $subcategory = $rule->category?->normalized_name ?? $rule->target_subcategory;
             $merchantLabel = $rule->merchant?->name ?? $rule->merchant_contains;

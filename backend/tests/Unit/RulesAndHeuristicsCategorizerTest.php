@@ -64,6 +64,39 @@ class RulesAndHeuristicsCategorizerTest extends TestCase
         $this->assertTrue($result->isConfident());
     }
 
+    #[TestDox('Rules targeting archived categories are ignored')]
+    public function test_rules_with_archived_categories_are_ignored(): void
+    {
+        $category = Category::factory()->for($this->user)->create([
+            'bucket' => Bucket::Want,
+            'name' => 'Archived Treats',
+        ]);
+        CategorizationRule::factory()->create([
+            'user_id' => $this->user->id,
+            'name' => 'Archived category rule',
+            'merchant_contains' => 'archive only merchant',
+            'category_id' => $category->id,
+            'target_bucket' => Bucket::Want,
+            'target_subcategory' => 'archived treats',
+            'enabled' => true,
+            'auto_review' => true,
+            'priority' => 1,
+        ]);
+        $category->update(['archived_at' => now()]);
+        $transaction = Transaction::factory()->unreviewed()->create([
+            'user_id' => $this->user->id,
+            'merchant' => 'Archive Only Merchant',
+            'kind' => TransactionKind::Expense,
+        ]);
+
+        $result = $this->categorizer->categorize($transaction);
+
+        $this->assertSame(ReviewSource::Heuristic, $result->source);
+        $this->assertNull($result->bucket);
+        $this->assertNull($result->categoryId);
+        $this->assertNull($result->ruleId);
+    }
+
     #[TestDox('Ignores account-scoped rules when the transaction account does not match')]
     public function test_account_scoped_rules_require_matching_account(): void
     {

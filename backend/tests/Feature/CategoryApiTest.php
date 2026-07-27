@@ -121,6 +121,61 @@ class CategoryApiTest extends TestCase
             ->assertJsonValidationErrors(['name']);
     }
 
+    #[TestDox('Archived custom category names can be reused without losing history')]
+    public function test_archived_custom_category_name_can_be_reused(): void
+    {
+        $original = Category::factory()->for($this->user)->create([
+            'name' => 'Coffee Runs',
+            'bucket' => Bucket::Want,
+        ]);
+        $this->deleteJson("/api/categories/{$original->id}")->assertNoContent();
+
+        $replacement = $this->postJson('/api/categories', [
+            'name' => '  coffee runs  ',
+            'bucket' => 'want',
+        ]);
+
+        $replacement->assertCreated()
+            ->assertJsonPath('data.name', 'coffee runs')
+            ->assertJsonPath('data.bucket', 'want');
+        $this->assertNotSame($original->id, $replacement->json('data.id'));
+        $this->assertNotNull($original->fresh()->archived_at);
+    }
+
+    #[TestDox('Moving a category rejects a duplicate name in the destination bucket')]
+    public function test_bucket_only_update_rejects_duplicate_in_destination_bucket(): void
+    {
+        $category = Category::factory()->for($this->user)->create([
+            'name' => 'Groceries',
+            'bucket' => Bucket::Want,
+        ]);
+
+        $this->patchJson("/api/categories/{$category->id}", [
+            'bucket' => 'need',
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['name']);
+
+        $this->assertSame(Bucket::Want, $category->fresh()->bucket);
+    }
+
+    #[TestDox('Unarchiving a category rejects a duplicate active name')]
+    public function test_unarchive_rejects_duplicate_active_name(): void
+    {
+        $category = Category::factory()->for($this->user)->archived()->create([
+            'name' => 'Dining',
+            'bucket' => Bucket::Want,
+        ]);
+
+        $this->patchJson("/api/categories/{$category->id}", [
+            'archived' => false,
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['name']);
+
+        $this->assertNotNull($category->fresh()->archived_at);
+    }
+
     #[TestDox('Rejects renaming or archiving system categories')]
     public function test_rejects_mutating_system_categories(): void
     {

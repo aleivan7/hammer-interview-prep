@@ -26,7 +26,7 @@ return new class extends Migration
         // SQLite treats NULL as distinct in unique indexes, so system and user
         // uniqueness must use partial indexes.
         DB::statement('CREATE UNIQUE INDEX categories_system_bucket_normalized_unique ON categories (bucket, normalized_name) WHERE user_id IS NULL');
-        DB::statement('CREATE UNIQUE INDEX categories_user_bucket_normalized_unique ON categories (user_id, bucket, normalized_name) WHERE user_id IS NOT NULL');
+        DB::statement('CREATE UNIQUE INDEX categories_user_bucket_normalized_unique ON categories (user_id, bucket, normalized_name) WHERE user_id IS NOT NULL AND archived_at IS NULL');
     }
 
     public function down(): void

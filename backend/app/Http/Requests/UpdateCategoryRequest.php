@@ -40,7 +40,7 @@ class UpdateCategoryRequest extends FormRequest
     public function withValidator(Validator $validator): void
     {
         $validator->after(function (Validator $validator): void {
-            if ($validator->errors()->isNotEmpty() || ! $this->filled('name')) {
+            if ($validator->errors()->isNotEmpty()) {
                 return;
             }
 
@@ -49,9 +49,19 @@ class UpdateCategoryRequest extends FormRequest
                 return;
             }
 
+            $willBeArchived = $this->exists('archived')
+                ? $this->boolean('archived')
+                : $category->isArchived();
+            if ($willBeArchived) {
+                return;
+            }
+
             $userId = app(DemoUserContext::class)->id();
             $bucket = $this->input('bucket', $category->bucket?->value ?? $category->bucket);
-            $normalized = CatalogNormalizer::name($this->string('name')->toString());
+            $name = $this->exists('name')
+                ? $this->string('name')->toString()
+                : $category->name;
+            $normalized = CatalogNormalizer::name($name);
 
             $duplicate = Category::query()
                 ->active()
