@@ -132,6 +132,14 @@ class TransactionController extends Controller
             }
         }
 
+        if (
+            array_key_exists('category_id', $attributes)
+            && $attributes['category_id'] === null
+            && ! array_key_exists('subcategory', $attributes)
+        ) {
+            $attributes['subcategory'] = null;
+        }
+
         if (array_key_exists('category_id', $attributes) && $attributes['category_id'] !== null) {
             $category = Category::query()->findOrFail($attributes['category_id']);
             $attributes['bucket'] = $category->bucket->value;

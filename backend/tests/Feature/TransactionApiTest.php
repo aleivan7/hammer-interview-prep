@@ -407,6 +407,39 @@ class TransactionApiTest extends TestCase
         ]);
     }
 
+    #[TestDox('First-time review with category_id null does not reuse a stale subcategory')]
+    public function test_review_with_explicit_null_category_clears_stale_subcategory(): void
+    {
+        $this->seed(CatalogSeeder::class);
+        $dining = Category::query()
+            ->whereNull('user_id')
+            ->where('bucket', Bucket::Want)
+            ->where('normalized_name', 'dining')
+            ->firstOrFail();
+        $transaction = Transaction::factory()->for($this->user)->unreviewed()->create([
+            'bucket' => Bucket::Want,
+            'subcategory' => 'Dining',
+            'category_id' => $dining->id,
+        ]);
+
+        $this->patchJson("/api/transactions/{$transaction->id}", [
+            'bucket' => 'need',
+            'category_id' => null,
+            'reviewed' => true,
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.bucket', 'need')
+            ->assertJsonPath('data.category_id', null)
+            ->assertJsonPath('data.subcategory', null);
+
+        $this->assertDatabaseHas('transactions', [
+            'id' => $transaction->id,
+            'bucket' => 'need',
+            'subcategory' => null,
+            'category_id' => null,
+        ]);
+    }
+
     #[TestDox('Patch rejects clearing the bucket while the transaction remains reviewed')]
     public function test_patch_rejects_clearing_bucket_while_transaction_remains_reviewed(): void
     {
