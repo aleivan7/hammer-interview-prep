@@ -343,6 +343,38 @@ class TransactionApiTest extends TestCase
         ]);
     }
 
+    #[TestDox('Bucket-only review preserves a detailed category in the same bucket')]
+    public function test_bucket_only_review_preserves_compatible_category(): void
+    {
+        $this->seed(CatalogSeeder::class);
+        $dining = Category::query()
+            ->whereNull('user_id')
+            ->where('bucket', Bucket::Want)
+            ->where('normalized_name', 'dining')
+            ->firstOrFail();
+        $transaction = Transaction::factory()->for($this->user)->unreviewed()->create([
+            'bucket' => Bucket::Want,
+            'subcategory' => 'Dining',
+            'category_id' => $dining->id,
+        ]);
+
+        $this->patchJson("/api/transactions/{$transaction->id}", [
+            'bucket' => 'want',
+            'reviewed' => true,
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.bucket', 'want')
+            ->assertJsonPath('data.category_id', $dining->id)
+            ->assertJsonPath('data.detailed_category.name', 'Dining');
+
+        $this->assertDatabaseHas('transactions', [
+            'id' => $transaction->id,
+            'bucket' => 'want',
+            'subcategory' => 'Dining',
+            'category_id' => $dining->id,
+        ]);
+    }
+
     #[TestDox('Clearing category_id clears its stale subcategory but preserves the bucket')]
     public function test_clearing_category_id_clears_stale_subcategory(): void
     {

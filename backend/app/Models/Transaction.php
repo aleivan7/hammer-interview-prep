@@ -66,7 +66,10 @@ class Transaction extends Model
                 $transaction->raw_merchant_descriptor = $transaction->merchant;
             }
 
-            if ($transaction->isDirty('raw_merchant_descriptor') || $transaction->isDirty('merchant')) {
+            if (
+                ($transaction->isDirty('raw_merchant_descriptor') || $transaction->isDirty('merchant'))
+                && ! $transaction->isDirty('merchant_id')
+            ) {
                 $resolution = app(MerchantResolver::class)->resolve((string) $transaction->raw_merchant_descriptor);
                 $transaction->merchant_id = $resolution?->merchant->id;
             }

@@ -116,8 +116,20 @@ class TransactionController extends Controller
         }
 
         if (array_key_exists('bucket', $attributes) && ! array_key_exists('category_id', $attributes)) {
-            $attributes['category_id'] = null;
-            $attributes['subcategory'] ??= null;
+            if ($attributes['bucket'] === null) {
+                $attributes['category_id'] = null;
+                $attributes['subcategory'] ??= null;
+            } else {
+                $selectedBucket = $attributes['bucket'] instanceof Bucket
+                    ? $attributes['bucket']
+                    : Bucket::from($attributes['bucket']);
+                $currentCategory = $transaction->category;
+
+                if ($currentCategory === null || $currentCategory->bucket !== $selectedBucket) {
+                    $attributes['category_id'] = null;
+                    $attributes['subcategory'] ??= null;
+                }
+            }
         }
 
         if (array_key_exists('category_id', $attributes) && $attributes['category_id'] !== null) {

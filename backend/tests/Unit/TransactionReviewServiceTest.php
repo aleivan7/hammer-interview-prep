@@ -4,11 +4,13 @@ namespace Tests\Unit;
 
 use App\Enums\Bucket;
 use App\Enums\ReviewSource;
+use App\Models\Merchant;
 use App\Models\ReviewAudit;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Services\TransactionReviewService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\TestDox;
 use Tests\TestCase;
@@ -78,6 +80,38 @@ class TransactionReviewServiceTest extends TestCase
         $this->assertNotNull($undoAudit);
         $this->assertSame('want', $undoAudit->previous_state['bucket'] ?? null);
         $this->assertSame('dining', $undoAudit->previous_state['subcategory'] ?? null);
+    }
+
+    #[TestDox('Undo restores an audited canonical merchant link without re-resolving it')]
+    public function test_undo_restores_audited_merchant_link(): void
+    {
+        $user = User::factory()->average()->create();
+        $netflix = Merchant::query()->where('normalized_name', 'netflix')->firstOrFail();
+        $transaction = Transaction::factory()->for($user)->unreviewed()->create([
+            'merchant' => 'Mystery Descriptor',
+            'raw_merchant_descriptor' => 'Mystery Descriptor',
+            'bucket' => Bucket::Want,
+        ]);
+        DB::table('transactions')->where('id', $transaction->id)->update([
+            'merchant_id' => $netflix->id,
+        ]);
+        $transaction->refresh();
+
+        $this->service->review(
+            transaction: $transaction,
+            bucket: Bucket::Want,
+            subcategory: null,
+            source: ReviewSource::Manual,
+        );
+        $transaction->refresh()->update([
+            'raw_merchant_descriptor' => 'Another Unknown Descriptor',
+        ]);
+        $this->assertNull($transaction->fresh()->merchant_id);
+
+        $undone = $this->service->undo($transaction->fresh());
+
+        $this->assertSame('Mystery Descriptor', $undone->raw_merchant_descriptor);
+        $this->assertSame($netflix->id, $undone->merchant_id);
     }
 
     #[TestDox('Undo on a factory-reviewed transaction without audit clears review without inventing a bucket')]
