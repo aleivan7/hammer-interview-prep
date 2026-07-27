@@ -11,7 +11,7 @@ function escapeCell(value: string): string {
   return safe
 }
 
-export function downloadTransactionsCsv(transactions: Transaction[]): void {
+export function transactionsToCsv(transactions: Transaction[]): string {
   const header = ['Date', 'Merchant', 'Kind', 'Bucket', 'Amount', 'Reviewed', 'Account']
   const rows = transactions.map((tx) => [
     tx.transaction_date,
@@ -23,10 +23,13 @@ export function downloadTransactionsCsv(transactions: Transaction[]): void {
     tx.account?.name ?? '',
   ])
 
-  const csv = [header, ...rows]
+  return [header, ...rows]
     .map((row) => row.map((cell) => escapeCell(String(cell))).join(','))
     .join('\n')
+}
 
+export function downloadTransactionsCsv(transactions: Transaction[]): void {
+  const csv = transactionsToCsv(transactions)
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
   const url = URL.createObjectURL(blob)
   const anchor = document.createElement('a')

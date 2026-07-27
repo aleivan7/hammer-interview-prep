@@ -3,6 +3,7 @@
 namespace Tests\Unit;
 
 use App\Services\Money;
+use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\TestDox;
 use PHPUnit\Framework\TestCase;
@@ -30,6 +31,34 @@ class MoneyTest extends TestCase
         ];
     }
 
+    #[TestDox('Converts integer dollars to cents without floating-point math')]
+    public function test_dollars_to_cents_accepts_integer_dollars(): void
+    {
+        $this->assertSame(1200, Money::dollarsToCents(12));
+        $this->assertSame(-500, Money::dollarsToCents(-5));
+    }
+
+    #[DataProvider('invalidDollarProvider')]
+    #[TestDox('Rejects invalid dollar amounts')]
+    public function test_dollars_to_cents_rejects_invalid_amounts(string $input): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Invalid money amount:');
+
+        Money::dollarsToCents($input);
+    }
+
+    public static function invalidDollarProvider(): array
+    {
+        return [
+            ['12.345'],
+            ['abc'],
+            [''],
+            ['12.3.4'],
+            ['$12.00'],
+        ];
+    }
+
     #[TestDox('Formats cents back to a stable two-decimal dollar string')]
     public function test_cents_to_dollar_string_is_stable(): void
     {
@@ -44,5 +73,6 @@ class MoneyTest extends TestCase
         $this->assertSame(300, Money::sumCents(100, 200));
         $this->assertSame(50, Money::percentOf(50, 100));
         $this->assertSame(33, Money::percentOf(1, 3));
+        $this->assertSame(0, Money::percentOf(50, 0));
     }
 }
