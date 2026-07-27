@@ -176,6 +176,45 @@ class SmartReviewApiTest extends TestCase
         ]);
     }
 
+    #[TestDox('Matching rules with auto_review=false suggest a bucket but are not auto-applied')]
+    public function test_matching_rule_without_auto_review_is_suggest_only(): void
+    {
+        CategorizationRule::factory()->for($this->user)->create([
+            'name' => 'Charitable giving',
+            'merchant_contains' => 'united way',
+            'target_bucket' => Bucket::Want,
+            'target_subcategory' => 'charity',
+            'priority' => 12,
+            'enabled' => true,
+            'auto_review' => false,
+        ]);
+
+        $transaction = Transaction::factory()->for($this->user)->unreviewed()->create([
+            'merchant' => 'United Way',
+            'transaction_date' => '2026-07-21',
+        ]);
+
+        $this->getJson("/api/transactions/{$transaction->id}/suggestion")
+            ->assertOk()
+            ->assertJsonPath('data.bucket', 'want')
+            ->assertJsonPath('data.subcategory', 'charity')
+            ->assertJsonPath('data.source', 'rule')
+            ->assertJsonPath('data.confidence', 95)
+            ->assertJsonPath('data.auto_review', false);
+
+        $this->postJson('/api/smart-review', ['batch_key' => 'suggest-only'])
+            ->assertOk()
+            ->assertJsonPath('data.applied_count', 0)
+            ->assertJsonPath('data.skipped_count', 1)
+            ->assertJsonPath('data.skipped.0.id', $transaction->id);
+
+        $this->assertDatabaseHas('transactions', [
+            'id' => $transaction->id,
+            'reviewed_at' => null,
+            'bucket' => null,
+        ]);
+    }
+
     #[TestDox('Smart Review can re-apply after undo when the same batch key is reused')]
     public function test_smart_review_reapplies_after_undo_with_same_batch_key(): void
     {
