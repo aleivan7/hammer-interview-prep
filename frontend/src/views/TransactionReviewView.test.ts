@@ -265,6 +265,29 @@ describe('TransactionReviewView', () => {
     expect(wrapper.get('[role="dialog"]').text()).toContain('HEB')
   })
 
+  it('blocks opening Focus mode while a list categorization is in flight', async () => {
+    const update = deferred<Transaction>()
+    vi.mocked(fetchReviewQueue).mockResolvedValue([firstTransaction, secondTransaction])
+    vi.mocked(updateTransaction).mockReturnValue(update.promise)
+
+    const wrapper = mount(TransactionReviewView)
+    await flushPromises()
+
+    await wrapper.get('select.bucket').setValue('need')
+    expect(wrapper.get('[aria-label="Open Shell Gas in focus mode"]').attributes('disabled')).toBeDefined()
+    expect(buttonContaining(wrapper, 'Start Focus mode').attributes('disabled')).toBeDefined()
+
+    await wrapper.get('[aria-label="Open HEB in focus mode"]').trigger('click')
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
+
+    update.resolve({
+      ...secondTransaction,
+      bucket: 'need',
+      reviewed: true,
+    })
+    await flushPromises()
+  })
+
   it('keeps the current transaction visible and reports update failures', async () => {
     vi.mocked(fetchReviewQueue).mockResolvedValue([firstTransaction])
     vi.mocked(updateTransaction).mockRejectedValue(new Error('Could not save category'))

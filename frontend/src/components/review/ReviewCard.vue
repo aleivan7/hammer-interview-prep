@@ -29,9 +29,12 @@ const {
   beginExit,
   reset,
 } = useCardSwipe((bucket) => {
-  if (!props.updating) {
-    emit('categorize', bucket)
+  if (props.updating) {
+    return false
   }
+
+  emit('categorize', bucket)
+  return true
 })
 
 watch(exiting, (isExiting) => {

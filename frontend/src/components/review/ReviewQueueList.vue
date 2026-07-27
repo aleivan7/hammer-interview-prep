@@ -121,6 +121,7 @@ function onRowBucket(id: number, event: Event): void {
           type="button"
           class="focus-transaction"
           :aria-label="`Open ${tx.merchant} in focus mode`"
+          :disabled="updating"
           @click="emit('focus', tx.id)"
         >
           <MerchantAvatar :name="tx.merchant" :size="36" />
@@ -237,6 +238,11 @@ function onRowBucket(id: number, event: Event): void {
   color: inherit;
   text-align: left;
   cursor: pointer;
+}
+
+.focus-transaction:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .focus-transaction div {

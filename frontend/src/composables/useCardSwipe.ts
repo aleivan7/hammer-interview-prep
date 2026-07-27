@@ -15,7 +15,7 @@ const EXIT_FRAME_MS = 12
  * Pointer drag mapping for review cards:
  * left → Wants, right → Needs, down → Savings.
  */
-export function useCardSwipe(onSwipe: (bucket: Bucket) => void) {
+export function useCardSwipe(onSwipe: (bucket: Bucket) => boolean | void) {
   const dragging = shallowRef(false)
   const exiting = shallowRef(false)
   const offsetX = shallowRef(0)
@@ -41,7 +41,14 @@ export function useCardSwipe(onSwipe: (bucket: Bucket) => void) {
       cancelAnimationFrame(moveFrame)
       moveFrame = null
     }
+  }
+
+  function flushPendingPointer(): void {
+    if (latestPointer && active && origin && !exiting.value) {
+      applyPointer(latestPointer)
+    }
     latestPointer = null
+    clearMoveFrame()
   }
 
   function bucketFromDelta(dx: number, dy: number): Bucket | null {
@@ -93,6 +100,7 @@ export function useCardSwipe(onSwipe: (bucket: Bucket) => void) {
 
     clearExitTimer()
     clearMoveFrame()
+    latestPointer = null
     exitPromise = null
     active = true
     dragging.value = true
@@ -121,6 +129,7 @@ export function useCardSwipe(onSwipe: (bucket: Bucket) => void) {
   function reset(): void {
     clearExitTimer()
     clearMoveFrame()
+    latestPointer = null
     exitPromise = null
     active = false
     dragging.value = false
@@ -138,6 +147,7 @@ export function useCardSwipe(onSwipe: (bucket: Bucket) => void) {
 
     clearExitTimer()
     clearMoveFrame()
+    latestPointer = null
     active = false
     dragging.value = false
     origin = null
@@ -172,7 +182,10 @@ export function useCardSwipe(onSwipe: (bucket: Bucket) => void) {
 
   async function beginExit(bucket: Bucket): Promise<void> {
     await animateExit(bucket)
-    onSwipe(bucket)
+    const accepted = onSwipe(bucket)
+    if (accepted === false) {
+      reset()
+    }
   }
 
   function finish(commit: boolean): void {
@@ -180,11 +193,17 @@ export function useCardSwipe(onSwipe: (bucket: Bucket) => void) {
       return
     }
 
+    if (commit) {
+      flushPendingPointer()
+    } else {
+      latestPointer = null
+      clearMoveFrame()
+    }
+
     const bucket = commit ? bucketFromDelta(offsetX.value, offsetY.value) : null
     active = false
     dragging.value = false
     origin = null
-    clearMoveFrame()
 
     if (!bucket) {
       offsetX.value = 0
@@ -214,6 +233,7 @@ export function useCardSwipe(onSwipe: (bucket: Bucket) => void) {
   onUnmounted(() => {
     clearExitTimer()
     clearMoveFrame()
+    latestPointer = null
     active = false
   })
 
