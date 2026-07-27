@@ -387,6 +387,79 @@ class TransactionApiTest extends TestCase
             ->assertJsonPath('data.0.merchant', 'Own Merchant');
     }
 
+    #[TestDox('Index filters by reviewed state, bucket, account, and merchant search')]
+    public function test_index_filters_by_reviewed_bucket_account_and_search(): void
+    {
+        $checking = Account::factory()->for($this->user)->create(['name' => 'Checking']);
+        $savings = Account::factory()->for($this->user)->create(['name' => 'Savings']);
+        $foreign = User::factory()->reckless()->create();
+        $foreignAccount = Account::factory()->for($foreign)->create();
+
+        Transaction::factory()->for($this->user)->reviewed()->create([
+            'account_id' => $checking->id,
+            'merchant' => 'HEB Market',
+            'bucket' => Bucket::Need,
+            'transaction_date' => '2026-07-10',
+        ]);
+        Transaction::factory()->for($this->user)->reviewed()->create([
+            'account_id' => $savings->id,
+            'merchant' => 'Netflix',
+            'bucket' => Bucket::Want,
+            'transaction_date' => '2026-07-11',
+        ]);
+        Transaction::factory()->for($this->user)->unreviewed()->create([
+            'account_id' => $checking->id,
+            'merchant' => 'Mystery Shop',
+            'transaction_date' => '2026-07-12',
+        ]);
+        Transaction::factory()->for($foreign)->reviewed()->create([
+            'account_id' => $foreignAccount->id,
+            'merchant' => 'HEB Market',
+            'bucket' => Bucket::Need,
+        ]);
+
+        $this->getJson('/api/transactions?reviewed=1&paginate=false')
+            ->assertOk()
+            ->assertJsonCount(2, 'data');
+
+        $this->getJson('/api/transactions?reviewed=0&paginate=false')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.merchant', 'Mystery Shop');
+
+        $this->getJson('/api/transactions?bucket=need&paginate=false')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.merchant', 'HEB Market');
+
+        $this->getJson('/api/transactions?account_id='.$checking->id.'&paginate=false')
+            ->assertOk()
+            ->assertJsonCount(2, 'data');
+
+        $this->getJson('/api/transactions?account_id='.$foreignAccount->id.'&paginate=false')
+            ->assertOk()
+            ->assertJsonCount(0, 'data');
+
+        $this->getJson('/api/transactions?search=heb&paginate=false')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.merchant', 'HEB Market');
+    }
+
+    #[TestDox('Default index pagination returns page meta with 25-item pages')]
+    public function test_index_default_pagination_includes_meta(): void
+    {
+        Transaction::factory()->for($this->user)->count(26)->unreviewed()->create();
+
+        $response = $this->getJson('/api/transactions');
+
+        $response->assertOk()
+            ->assertJsonCount(25, 'data')
+            ->assertJsonPath('meta.per_page', 25)
+            ->assertJsonPath('meta.total', 26)
+            ->assertJsonPath('meta.current_page', 1);
+    }
+
     #[TestDox('A user cannot update another user’s transaction')]
     public function test_user_cannot_update_another_users_transaction(): void
     {
