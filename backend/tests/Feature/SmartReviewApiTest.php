@@ -175,4 +175,62 @@ class SmartReviewApiTest extends TestCase
             'reviewed_at' => null,
         ]);
     }
+
+    #[TestDox('Suggestion and Smart Review ignore another user’s matching auto-review rules')]
+    public function test_foreign_user_rules_do_not_categorize_selected_user_transactions(): void
+    {
+        $other = User::factory()->reckless()->create();
+
+        CategorizationRule::factory()->for($other)->create([
+            'name' => 'Foreign boutique want',
+            'merchant_contains' => 'unique boutique xyz',
+            'target_bucket' => Bucket::Want,
+            'target_subcategory' => 'shopping',
+            'auto_review' => true,
+            'priority' => 1,
+        ]);
+
+        CategorizationRule::factory()->for($this->user)->create([
+            'name' => 'Own boutique need',
+            'merchant_contains' => 'unique boutique xyz',
+            'target_bucket' => Bucket::Need,
+            'target_subcategory' => 'household',
+            'auto_review' => true,
+            'priority' => 1,
+        ]);
+
+        $transaction = Transaction::factory()->for($this->user)->unreviewed()->create([
+            'merchant' => 'Unique Boutique XYZ',
+            'transaction_date' => '2026-07-14',
+        ]);
+
+        $this->getJson("/api/transactions/{$transaction->id}/suggestion")
+            ->assertOk()
+            ->assertJsonPath('data.source', 'rule')
+            ->assertJsonPath('data.bucket', 'need')
+            ->assertJsonPath('data.subcategory', 'household')
+            ->assertJsonPath('data.auto_review', true);
+
+        // Disable the owned rule so only the foreign rule remains as a candidate.
+        CategorizationRule::query()->forUser($this->user)->update(['enabled' => false]);
+
+        $this->getJson("/api/transactions/{$transaction->id}/suggestion")
+            ->assertOk()
+            ->assertJsonPath('data.source', 'heuristic')
+            ->assertJsonPath('data.bucket', null)
+            ->assertJsonPath('data.confidence', 0)
+            ->assertJsonPath('data.auto_review', false);
+
+        $this->postJson('/api/smart-review', ['batch_key' => 'foreign-rule-isolation'])
+            ->assertOk()
+            ->assertJsonPath('data.applied_count', 0)
+            ->assertJsonPath('data.skipped_count', 1)
+            ->assertJsonPath('data.skipped.0.id', $transaction->id);
+
+        $this->assertDatabaseHas('transactions', [
+            'id' => $transaction->id,
+            'reviewed_at' => null,
+            'bucket' => null,
+        ]);
+    }
 }
