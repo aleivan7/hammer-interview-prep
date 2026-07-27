@@ -61,7 +61,7 @@ final class RulesAndHeuristicsCategorizer implements TransactionCategorizer
             }
 
             $bucket = $rule->category?->bucket ?? $rule->target_bucket;
-            $subcategory = $rule->category?->normalized_name ?? $rule->target_subcategory;
+            $subcategory = $rule->category?->name ?? $rule->target_subcategory;
             $merchantLabel = $rule->merchant?->name ?? $rule->merchant_contains;
 
             return new CategorizationResult(

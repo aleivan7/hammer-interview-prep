@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Contracts\TransactionCategorizer;
 use App\Enums\Bucket;
 use App\Enums\ReviewSource;
+use App\Models\Category;
 use App\Models\ReviewAudit;
 use App\Models\Transaction;
 use App\Support\CategorizationResult;
@@ -42,6 +43,12 @@ final class TransactionReviewService
 
             if ($transaction->isReviewed() && $idempotencyKey === null) {
                 throw new InvalidArgumentException('Transaction is already reviewed.');
+            }
+
+            if ($categoryId !== null) {
+                $category = Category::query()->findOrFail($categoryId);
+                $bucket = $category->bucket;
+                $subcategory = $category->name;
             }
 
             $previous = [

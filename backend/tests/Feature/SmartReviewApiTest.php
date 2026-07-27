@@ -353,7 +353,7 @@ class SmartReviewApiTest extends TestCase
         $this->getJson("/api/transactions/{$transaction->id}/suggestion")
             ->assertOk()
             ->assertJsonPath('data.bucket', 'want')
-            ->assertJsonPath('data.subcategory', 'charity')
+            ->assertJsonPath('data.subcategory', 'Charity')
             ->assertJsonPath('data.source', 'rule')
             ->assertJsonPath('data.confidence', 95)
             ->assertJsonPath('data.auto_review', false);

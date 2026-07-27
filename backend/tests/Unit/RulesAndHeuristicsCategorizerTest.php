@@ -350,7 +350,7 @@ class RulesAndHeuristicsCategorizerTest extends TestCase
 
         $this->assertSame(ReviewSource::Rule, $result->source);
         $this->assertSame(Bucket::Want, $result->bucket);
-        $this->assertSame('entertainment', $result->subcategory);
+        $this->assertSame('Entertainment', $result->subcategory);
         $this->assertSame($category->id, $result->categoryId);
         $this->assertSame($rule->id, $result->ruleId);
         $this->assertTrue($result->isConfident());
@@ -389,7 +389,7 @@ class RulesAndHeuristicsCategorizerTest extends TestCase
 
         $this->assertSame(ReviewSource::Rule, $result->source);
         $this->assertSame(Bucket::Need, $result->bucket);
-        $this->assertSame('groceries', $result->subcategory);
+        $this->assertSame('Groceries', $result->subcategory);
         $this->assertSame($category->id, $result->categoryId);
         $this->assertTrue($result->isConfident());
     }

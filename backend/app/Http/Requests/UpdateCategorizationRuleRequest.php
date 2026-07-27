@@ -5,6 +5,7 @@ namespace App\Http\Requests;
 use App\Enums\Bucket;
 use App\Models\CategorizationRule;
 use App\Models\Category;
+use App\Support\CatalogNormalizer;
 use App\Support\DemoUserContext;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
@@ -105,16 +106,30 @@ class UpdateCategorizationRuleRequest extends FormRequest
                     ? $this->integer('category_id')
                     : $rule->category_id;
 
-                if ($categoryId === null || ! $this->filled('target_bucket')) {
+                if ($categoryId === null) {
                     return;
                 }
 
                 $category = Category::query()->find($categoryId);
 
-                if ($category !== null && $this->input('target_bucket') !== $category->bucket->value) {
+                if ($category === null) {
+                    return;
+                }
+
+                if ($this->filled('target_bucket') && $this->input('target_bucket') !== $category->bucket->value) {
                     $validator->errors()->add(
                         'target_bucket',
                         'The target bucket must match the selected category bucket.',
+                    );
+                }
+
+                if (
+                    $this->filled('target_subcategory')
+                    && CatalogNormalizer::name($this->string('target_subcategory')->toString()) !== $category->normalized_name
+                ) {
+                    $validator->errors()->add(
+                        'target_subcategory',
+                        'The target subcategory must match the selected category.',
                     );
                 }
             },

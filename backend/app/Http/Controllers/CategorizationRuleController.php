@@ -91,7 +91,7 @@ class CategorizationRuleController extends Controller
 
         $categoryId = array_key_exists('category_id', $data)
             ? $data['category_id']
-            : null;
+            : $existing?->category_id;
 
         if ($categoryId !== null) {
             $category = Category::query()->findOrFail($categoryId);

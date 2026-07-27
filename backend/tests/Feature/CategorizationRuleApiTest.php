@@ -387,6 +387,45 @@ class CategorizationRuleApiTest extends TestCase
         ]);
     }
 
+    #[TestDox('Partial rule updates re-derive targets from the existing linked category')]
+    public function test_partial_update_rederives_targets_from_existing_category(): void
+    {
+        $rule = CategorizationRule::factory()->for($this->user)->create([
+            'merchant_id' => $this->netflix->id,
+            'category_id' => $this->entertainment->id,
+            'target_bucket' => Bucket::Need,
+            'target_subcategory' => 'stale value',
+            'enabled' => true,
+        ]);
+
+        $this->patchJson("/api/rules/{$rule->id}", [
+            'enabled' => false,
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.enabled', false)
+            ->assertJsonPath('data.target_bucket', 'want')
+            ->assertJsonPath('data.target_subcategory', 'entertainment');
+    }
+
+    #[TestDox('Rejects target_subcategory that conflicts with a linked category')]
+    public function test_update_rejects_conflicting_target_subcategory(): void
+    {
+        $rule = CategorizationRule::factory()->for($this->user)->create([
+            'merchant_id' => $this->netflix->id,
+            'category_id' => $this->entertainment->id,
+            'target_bucket' => Bucket::Want,
+            'target_subcategory' => 'entertainment',
+        ]);
+
+        $this->patchJson("/api/rules/{$rule->id}", [
+            'target_subcategory' => 'housing',
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['target_subcategory']);
+
+        $this->assertSame('entertainment', $rule->fresh()->target_subcategory);
+    }
+
     #[TestDox('Updating category_id re-derives target_bucket and target_subcategory')]
     public function test_update_category_derives_legacy_target_fields(): void
     {

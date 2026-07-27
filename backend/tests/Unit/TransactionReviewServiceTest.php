@@ -146,6 +146,37 @@ class TransactionReviewServiceTest extends TestCase
         $this->assertSame($category->id, $undone->category_id);
     }
 
+    #[TestDox('Review uses the category display name consistently in the transaction and audit')]
+    public function test_review_canonicalizes_category_fields_for_transaction_and_audit(): void
+    {
+        $user = User::factory()->average()->create();
+        $category = Category::factory()->for($user)->create([
+            'bucket' => Bucket::Want,
+            'name' => 'Coffee Treats',
+        ]);
+        $transaction = Transaction::factory()->for($user)->unreviewed()->create();
+
+        $reviewed = $this->service->review(
+            transaction: $transaction,
+            bucket: Bucket::Need,
+            subcategory: 'coffee treats',
+            source: ReviewSource::Rule,
+            categoryId: $category->id,
+        );
+
+        $audit = ReviewAudit::query()
+            ->where('transaction_id', $transaction->id)
+            ->where('action', 'review')
+            ->latest('id')
+            ->firstOrFail();
+
+        $this->assertSame(Bucket::Want, $reviewed->bucket);
+        $this->assertSame('Coffee Treats', $reviewed->subcategory);
+        $this->assertSame($category->id, $reviewed->category_id);
+        $this->assertSame(Bucket::Want, $audit->bucket);
+        $this->assertSame('Coffee Treats', $audit->subcategory);
+    }
+
     #[TestDox('Undo on a factory-reviewed transaction without audit clears review without inventing a bucket')]
     public function test_undo_without_audit_clears_review_state(): void
     {
