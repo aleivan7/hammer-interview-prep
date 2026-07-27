@@ -219,4 +219,137 @@ class SafeToSpendServiceTest extends TestCase
         $this->assertSame(0, $midJuly['bucket_actuals']['want']);
         $this->assertCount(0, $midJuly['unusual_alerts']);
     }
+
+    #[TestDox('Excludes income due before asOf and non-essential bills from the safe-to-spend breakdown')]
+    public function test_excludes_past_income_and_non_essential_bills(): void
+    {
+        $user = User::factory()->average()->create();
+
+        FinancialPlan::factory()->for($user)->create([
+            'monthly_income_cents' => 100_000,
+            'savings_percent' => 0,
+            'safety_buffer_cents' => 0,
+        ]);
+        Account::factory()->for($user)->create(['balance_cents' => 10_000]);
+
+        PlannedCashFlow::factory()->for($user)->create([
+            'name' => 'Already paid paycheck',
+            'kind' => 'income',
+            'amount_cents' => 260_000,
+            'due_on' => '2026-07-10',
+        ]);
+        PlannedCashFlow::factory()->for($user)->create([
+            'name' => 'Upcoming paycheck',
+            'kind' => 'income',
+            'amount_cents' => 50_000,
+            'due_on' => '2026-07-28',
+        ]);
+        PlannedCashFlow::factory()->for($user)->bill()->create([
+            'name' => 'Rent',
+            'amount_cents' => 20_000,
+            'due_on' => '2026-07-30',
+            'is_essential' => true,
+        ]);
+        PlannedCashFlow::factory()->for($user)->create([
+            'name' => 'Streaming',
+            'kind' => 'bill',
+            'amount_cents' => 1_500,
+            'due_on' => '2026-07-29',
+            'is_essential' => false,
+            'bucket' => Bucket::Want,
+        ]);
+
+        $result = app(SafeToSpendService::class)->forUser($user, Carbon::parse('2026-07-15'));
+
+        $this->assertSame(50_000, $result['breakdown']['remaining_expected_income_cents']);
+        $this->assertSame(20_000, $result['breakdown']['upcoming_essential_bills_cents']);
+        $this->assertSame(40_000, $result['safe_to_spend_cents']);
+    }
+
+    #[TestDox('Reviewed income does not inflate bucket spending actuals')]
+    public function test_reviewed_income_does_not_inflate_bucket_actuals(): void
+    {
+        $user = User::factory()->average()->create();
+
+        FinancialPlan::factory()->for($user)->create([
+            'monthly_income_cents' => 100_000,
+            'savings_percent' => 0,
+            'safety_buffer_cents' => 0,
+        ]);
+        Account::factory()->for($user)->create(['balance_cents' => 0]);
+
+        Transaction::factory()->for($user)->reviewed()->create([
+            'kind' => TransactionKind::Income,
+            'bucket' => Bucket::Savings,
+            'amount_cents' => 250_000,
+            'transaction_date' => '2026-07-08',
+        ]);
+
+        Transaction::factory()->for($user)->reviewed()->create([
+            'kind' => TransactionKind::Expense,
+            'bucket' => Bucket::Need,
+            'amount_cents' => 3_000,
+            'transaction_date' => '2026-07-09',
+        ]);
+
+        $result = app(SafeToSpendService::class)->forUser($user, Carbon::parse('2026-07-15'));
+
+        $this->assertSame(3_000, $result['bucket_actuals']['need']);
+        $this->assertSame(0, $result['bucket_actuals']['savings']);
+    }
+
+    #[TestDox('Surfaces at most three unusual expense alerts at or above 100000 cents')]
+    public function test_unusual_alerts_include_large_expenses_capped_at_three(): void
+    {
+        $user = User::factory()->average()->create();
+
+        FinancialPlan::factory()->for($user)->create([
+            'monthly_income_cents' => 100_000,
+            'savings_percent' => 0,
+            'safety_buffer_cents' => 0,
+        ]);
+        Account::factory()->for($user)->create(['balance_cents' => 0]);
+
+        Transaction::factory()->for($user)->create([
+            'kind' => TransactionKind::Expense,
+            'merchant' => 'Below Threshold',
+            'amount_cents' => 99_999,
+            'transaction_date' => '2026-07-05',
+        ]);
+        Transaction::factory()->for($user)->create([
+            'kind' => TransactionKind::Expense,
+            'merchant' => 'Big Four',
+            'amount_cents' => 100_000,
+            'transaction_date' => '2026-07-06',
+        ]);
+        Transaction::factory()->for($user)->create([
+            'kind' => TransactionKind::Expense,
+            'merchant' => 'Big Three',
+            'amount_cents' => 150_000,
+            'transaction_date' => '2026-07-07',
+        ]);
+        Transaction::factory()->for($user)->create([
+            'kind' => TransactionKind::Expense,
+            'merchant' => 'Big Two',
+            'amount_cents' => 200_000,
+            'transaction_date' => '2026-07-08',
+        ]);
+        Transaction::factory()->for($user)->create([
+            'kind' => TransactionKind::Expense,
+            'merchant' => 'Big One',
+            'amount_cents' => 300_000,
+            'transaction_date' => '2026-07-09',
+        ]);
+
+        $result = app(SafeToSpendService::class)->forUser($user, Carbon::parse('2026-07-15'));
+
+        $this->assertCount(3, $result['unusual_alerts']);
+        $this->assertSame('Big One', $result['unusual_alerts'][0]['merchant']);
+        $this->assertSame('3000.00', $result['unusual_alerts'][0]['amount']);
+        $this->assertSame('Big Two', $result['unusual_alerts'][1]['merchant']);
+        $this->assertSame('Big Three', $result['unusual_alerts'][2]['merchant']);
+        $merchants = array_column($result['unusual_alerts'], 'merchant');
+        $this->assertNotContains('Below Threshold', $merchants);
+        $this->assertNotContains('Big Four', $merchants);
+    }
 }

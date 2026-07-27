@@ -369,6 +369,47 @@ class TransactionApiTest extends TestCase
         ]);
     }
 
+    #[TestDox('Undo after a manual review restores the prior bucket from the review audit')]
+    public function test_undo_after_manual_review_restores_previous_bucket(): void
+    {
+        $transaction = Transaction::factory()->for($this->user)->unreviewed()->create([
+            'bucket' => Bucket::Need,
+            'subcategory' => 'groceries',
+            'merchant' => 'HEB',
+        ]);
+
+        $this->patchJson("/api/transactions/{$transaction->id}", [
+            'bucket' => 'want',
+            'subcategory' => 'dining',
+            'reviewed' => true,
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.bucket', 'want')
+            ->assertJsonPath('data.reviewed', true);
+
+        $this->postJson("/api/transactions/{$transaction->id}/undo")
+            ->assertOk()
+            ->assertJsonPath('data.reviewed', false)
+            ->assertJsonPath('data.bucket', 'need');
+
+        $this->assertDatabaseHas('transactions', [
+            'id' => $transaction->id,
+            'bucket' => 'need',
+            'subcategory' => 'groceries',
+            'reviewed_at' => null,
+        ]);
+
+        $this->assertDatabaseHas('review_audits', [
+            'transaction_id' => $transaction->id,
+            'action' => 'review',
+            'bucket' => 'want',
+        ]);
+        $this->assertDatabaseHas('review_audits', [
+            'transaction_id' => $transaction->id,
+            'action' => 'undo',
+        ]);
+    }
+
     #[TestDox('Transaction listing belongs only to the selected user')]
     public function test_transaction_listing_belongs_only_to_selected_user(): void
     {
