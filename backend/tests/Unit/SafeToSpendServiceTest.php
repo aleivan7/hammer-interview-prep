@@ -156,6 +156,70 @@ class SafeToSpendServiceTest extends TestCase
         $this->assertSame(0, $result['breakdown']['remaining_expected_income_cents']);
     }
 
+    #[TestDox('Cash flows, spend, and alerts from other months do not leak into the selected period')]
+    public function test_period_isolation_excludes_other_month_cash_flows_spend_and_alerts(): void
+    {
+        $user = User::factory()->average()->create();
+
+        FinancialPlan::factory()->for($user)->create([
+            'monthly_income_cents' => 100_000,
+            'savings_percent' => 0,
+            'safety_buffer_cents' => 0,
+        ]);
+        Account::factory()->for($user)->create(['balance_cents' => 10_000]);
+
+        PlannedCashFlow::factory()->for($user)->create([
+            'name' => 'June paycheck',
+            'kind' => 'income',
+            'amount_cents' => 260_000,
+            'due_on' => '2026-06-28',
+        ]);
+        PlannedCashFlow::factory()->for($user)->bill()->create([
+            'name' => 'June rent',
+            'amount_cents' => 165_000,
+            'due_on' => '2026-06-30',
+            'is_essential' => true,
+        ]);
+        PlannedCashFlow::factory()->for($user)->create([
+            'name' => 'July paycheck',
+            'kind' => 'income',
+            'amount_cents' => 50_000,
+            'due_on' => '2026-07-28',
+        ]);
+
+        Transaction::factory()->for($user)->reviewed()->create([
+            'merchant' => 'June Grocery',
+            'kind' => TransactionKind::Expense,
+            'bucket' => Bucket::Need,
+            'amount_cents' => 8_000,
+            'transaction_date' => '2026-06-20',
+        ]);
+        Transaction::factory()->for($user)->reviewed()->create([
+            'merchant' => 'July Grocery',
+            'kind' => TransactionKind::Expense,
+            'bucket' => Bucket::Need,
+            'amount_cents' => 3_000,
+            'transaction_date' => '2026-07-20',
+        ]);
+        Transaction::factory()->for($user)->reviewed()->create([
+            'merchant' => 'June Big Purchase',
+            'kind' => TransactionKind::Expense,
+            'bucket' => Bucket::Want,
+            'amount_cents' => 150_000,
+            'transaction_date' => '2026-06-15',
+        ]);
+
+        $midJuly = app(SafeToSpendService::class)->forUser($user, Carbon::parse('2026-07-15'));
+
+        $this->assertSame('2026-07', $midJuly['period']);
+        $this->assertSame('2026-07-15', $midJuly['effective_on']);
+        $this->assertSame(50_000, $midJuly['breakdown']['remaining_expected_income_cents']);
+        $this->assertSame(0, $midJuly['breakdown']['upcoming_essential_bills_cents']);
+        $this->assertSame(3_000, $midJuly['bucket_actuals']['need']);
+        $this->assertSame(0, $midJuly['bucket_actuals']['want']);
+        $this->assertCount(0, $midJuly['unusual_alerts']);
+    }
+
     #[TestDox('Excludes income due before asOf and non-essential bills from the safe-to-spend breakdown')]
     public function test_excludes_past_income_and_non_essential_bills(): void
     {

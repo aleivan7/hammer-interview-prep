@@ -150,4 +150,45 @@ class DashboardApiTest extends TestCase
         $this->assertSame(5, $values[PersonaType::HighNetWorth->value]['accounts']);
         $this->assertGreaterThan(0, $values[PersonaType::Reckless->value]['unreviewed']);
     }
+
+    #[TestDox('Dashboard period query isolates cash flows and STS period metadata to that month')]
+    public function test_dashboard_period_isolates_cash_flows_and_safe_to_spend_metadata(): void
+    {
+        $user = $this->withDemoUser(User::factory()->average()->create());
+
+        FinancialPlan::factory()->for($user)->create([
+            'monthly_income_cents' => 100_000,
+            'savings_percent' => 0,
+            'safety_buffer_cents' => 0,
+        ]);
+        Account::factory()->for($user)->create(['balance_cents' => 10_000]);
+
+        PlannedCashFlow::factory()->for($user)->create([
+            'name' => 'June paycheck',
+            'kind' => 'income',
+            'amount_cents' => 260_000,
+            'due_on' => '2026-06-28',
+        ]);
+        PlannedCashFlow::factory()->for($user)->create([
+            'name' => 'July paycheck',
+            'kind' => 'income',
+            'amount_cents' => 50_000,
+            'due_on' => '2026-07-28',
+        ]);
+
+        $response = $this->getJson('/api/dashboard?period=2026-07');
+
+        $response->assertOk()
+            ->assertJsonPath('data.safe_to_spend.period', '2026-07')
+            ->assertJsonPath('data.safe_to_spend.effective_on', '2026-07-31');
+
+        $cashFlowNames = collect($response->json('data.cash_flows'))->pluck('name')->all();
+        $this->assertContains('July paycheck', $cashFlowNames);
+        $this->assertNotContains('June paycheck', $cashFlowNames);
+        // period=Y-m uses end-of-month asOf, so a July 28 income is already past.
+        $this->assertSame(
+            0,
+            $response->json('data.safe_to_spend.breakdown.remaining_expected_income_cents'),
+        );
+    }
 }
