@@ -391,6 +391,58 @@ describe('TransactionReviewView', () => {
     })
   })
 
+  it('categorizes Savings with ArrowDown and shows Focus completion for the last card', async () => {
+    vi.mocked(fetchReviewQueue).mockResolvedValue([olderMonthTransaction, firstTransaction])
+    vi.mocked(updateTransaction).mockResolvedValue({
+      ...firstTransaction,
+      bucket: 'savings',
+      reviewed: true,
+    })
+
+    const wrapper = mount(TransactionReviewView)
+    await flushPromises()
+
+    await buttonContaining(wrapper, 'Start Focus mode').trigger('click')
+    await flushPromises()
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }))
+    await completeFocusExit()
+    await flushPromises()
+
+    expect(updateTransaction).toHaveBeenCalledWith(1, {
+      bucket: 'savings',
+      reviewed: true,
+    })
+
+    const dialog = wrapper.get('[role="dialog"]')
+    expect(dialog.text()).toContain('Month complete')
+    expect(dialog.text()).toContain('1 of 1 reviewed')
+    expect(dialog.text()).toContain('Return to month')
+
+    await buttonContaining(dialog, 'Return to month').trigger('click')
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('July 2026 is complete')
+  })
+
+  it('does not rotate Focus when Skip is pressed with a single remaining transaction', async () => {
+    vi.mocked(fetchReviewQueue).mockResolvedValue([firstTransaction])
+
+    const wrapper = mount(TransactionReviewView)
+    await flushPromises()
+
+    await buttonContaining(wrapper, 'Start Focus mode').trigger('click')
+    await flushPromises()
+
+    const dialog = wrapper.get('[role="dialog"]')
+    expect(dialog.text()).toContain('HEB')
+    expect(dialog.text()).toContain('Transaction 1 of 1')
+
+    await buttonContaining(dialog, 'Skip').trigger('click')
+
+    expect(dialog.text()).toContain('HEB')
+    expect(dialog.text()).toContain('Transaction 1 of 1')
+  })
+
   it('bulk categorizes selected transactions, preserves failures, and supports undo', async () => {
     vi.mocked(fetchReviewQueue).mockResolvedValue([firstTransaction, secondTransaction])
     vi.mocked(updateTransaction).mockImplementation(async (id) => {
@@ -420,6 +472,65 @@ describe('TransactionReviewView', () => {
 
     expect(undoTransactionReview).toHaveBeenCalledWith(1)
     expect(wrapper.text()).toContain('HEB')
+  })
+
+  it('select-all visible only batches filtered matches after search changes', async () => {
+    const hiddenMatch: Transaction = {
+      ...secondTransaction,
+      id: 4,
+      merchant: 'Whole Foods',
+      amount_cents: 3200,
+      amount: '32.00',
+    }
+
+    vi.mocked(fetchReviewQueue).mockResolvedValue([
+      firstTransaction,
+      secondTransaction,
+      hiddenMatch,
+    ])
+    vi.mocked(updateTransaction).mockImplementation(async (id) => {
+      const source =
+        id === firstTransaction.id
+          ? firstTransaction
+          : id === secondTransaction.id
+            ? secondTransaction
+            : hiddenMatch
+
+      return { ...source, bucket: 'want', reviewed: true }
+    })
+
+    const wrapper = mount(TransactionReviewView)
+    await flushPromises()
+
+    await wrapper.get('input[type="search"]').setValue('Shell')
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.text()).toContain('Shell Gas')
+    expect(wrapper.text()).not.toContain('HEB')
+    expect(wrapper.text()).not.toContain('Whole Foods')
+
+    await wrapper.get('label.select-all input[type="checkbox"]').setValue(true)
+    expect(wrapper.text()).toContain('1 selected')
+
+    await wrapper.get('input[type="search"]').setValue('')
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.text()).toContain('HEB')
+    expect(wrapper.text()).toContain('Whole Foods')
+    expect(wrapper.text()).toContain('1 selected')
+
+    await buttonContaining(wrapper, 'Wants').trigger('click')
+    await flushPromises()
+
+    expect(updateTransaction).toHaveBeenCalledTimes(1)
+    expect(updateTransaction).toHaveBeenCalledWith(2, {
+      bucket: 'want',
+      reviewed: true,
+    })
+    expect(wrapper.text()).toContain('Categorized 1')
+    expect(wrapper.text()).toContain('HEB')
+    expect(wrapper.text()).toContain('Whole Foods')
+    expect(wrapper.text()).not.toContain('Shell Gas')
   })
 
   it('categorizes one transaction from its row', async () => {

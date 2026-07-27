@@ -116,6 +116,49 @@ class CategorizationRuleApiTest extends TestCase
         ]);
     }
 
+    #[TestDox('Rejects patching amount min above the rule’s existing amount max')]
+    public function test_patch_rejects_amount_min_above_existing_max(): void
+    {
+        $rule = CategorizationRule::factory()->for($this->user)->create([
+            'amount_cents_min' => 1000,
+            'amount_cents_max' => 5000,
+        ]);
+
+        $this->patchJson("/api/rules/{$rule->id}", [
+            'amount_cents_min' => 9000,
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['amount_cents_min']);
+
+        $this->assertDatabaseHas('categorization_rules', [
+            'id' => $rule->id,
+            'amount_cents_min' => 1000,
+            'amount_cents_max' => 5000,
+        ]);
+    }
+
+    #[TestDox('Rejects patching both amount bounds when max is below min')]
+    public function test_patch_rejects_both_amount_bounds_when_max_below_min(): void
+    {
+        $rule = CategorizationRule::factory()->for($this->user)->create([
+            'amount_cents_min' => 1000,
+            'amount_cents_max' => 5000,
+        ]);
+
+        $this->patchJson("/api/rules/{$rule->id}", [
+            'amount_cents_min' => 8000,
+            'amount_cents_max' => 2000,
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['amount_cents_max']);
+
+        $this->assertDatabaseHas('categorization_rules', [
+            'id' => $rule->id,
+            'amount_cents_min' => 1000,
+            'amount_cents_max' => 5000,
+        ]);
+    }
+
     #[TestDox('Rules are scoped to the selected demo user')]
     public function test_rules_are_scoped_to_selected_user(): void
     {
