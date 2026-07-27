@@ -3,7 +3,9 @@
 namespace Tests\Feature;
 
 use App\Enums\Bucket;
+use App\Models\CategorizationRule;
 use App\Models\Category;
+use App\Models\Transaction;
 use App\Models\User;
 use Database\Seeders\CatalogSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -157,6 +159,44 @@ class CategoryApiTest extends TestCase
             ->assertJsonValidationErrors(['name']);
 
         $this->assertSame(Bucket::Want, $category->fresh()->bucket);
+    }
+
+    #[TestDox('Renaming or moving a category synchronizes linked transactions and rules')]
+    public function test_category_update_synchronizes_linked_records(): void
+    {
+        $category = Category::factory()->for($this->user)->create([
+            'name' => 'Coffee Runs',
+            'bucket' => Bucket::Want,
+        ]);
+        $transaction = Transaction::factory()->for($this->user)->create([
+            'category_id' => $category->id,
+        ]);
+        $rule = CategorizationRule::factory()->for($this->user)->create([
+            'category_id' => $category->id,
+            'target_bucket' => Bucket::Want,
+            'target_subcategory' => 'coffee runs',
+        ]);
+
+        $this->patchJson("/api/categories/{$category->id}", [
+            'name' => 'Work Meals',
+            'bucket' => 'need',
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.name', 'Work Meals')
+            ->assertJsonPath('data.bucket', 'need');
+
+        $this->assertDatabaseHas('transactions', [
+            'id' => $transaction->id,
+            'category_id' => $category->id,
+            'bucket' => 'need',
+            'subcategory' => 'Work Meals',
+        ]);
+        $this->assertDatabaseHas('categorization_rules', [
+            'id' => $rule->id,
+            'category_id' => $category->id,
+            'target_bucket' => 'need',
+            'target_subcategory' => 'work meals',
+        ]);
     }
 
     #[TestDox('Unarchiving a category rejects a duplicate active name')]

@@ -100,7 +100,7 @@ final class TransactionReviewService
             $rawDescriptor = $transaction->raw_merchant_descriptor;
             $merchantId = $transaction->merchant_id;
 
-            $transaction->update([
+            $transaction->fill([
                 'bucket' => $previous['bucket'] ?? null,
                 'subcategory' => $previous['subcategory'] ?? null,
                 'category_id' => $previous['category_id'] ?? null,
@@ -112,6 +112,7 @@ final class TransactionReviewService
                 'review_explanation' => null,
                 'idempotency_key' => null,
             ]);
+            $transaction->saveQuietly();
 
             ReviewAudit::query()->create([
                 'transaction_id' => $transaction->id,

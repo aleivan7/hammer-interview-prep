@@ -4,6 +4,7 @@ namespace Tests\Unit;
 
 use App\Enums\Bucket;
 use App\Enums\ReviewSource;
+use App\Models\Category;
 use App\Models\Merchant;
 use App\Models\ReviewAudit;
 use App\Models\Transaction;
@@ -112,6 +113,37 @@ class TransactionReviewServiceTest extends TestCase
 
         $this->assertSame('Mystery Descriptor', $undone->raw_merchant_descriptor);
         $this->assertSame($netflix->id, $undone->merchant_id);
+    }
+
+    #[TestDox('Undo restores the audited category snapshot after the category changes')]
+    public function test_undo_restores_audited_category_snapshot(): void
+    {
+        $user = User::factory()->average()->create();
+        $category = Category::factory()->for($user)->create([
+            'bucket' => Bucket::Want,
+            'name' => 'Original Treats',
+        ]);
+        $transaction = Transaction::factory()->for($user)->unreviewed()->create([
+            'category_id' => $category->id,
+        ]);
+
+        $this->service->review(
+            transaction: $transaction,
+            bucket: Bucket::Need,
+            subcategory: null,
+            source: ReviewSource::Manual,
+            categoryId: null,
+        );
+        $category->update([
+            'bucket' => Bucket::Savings,
+            'name' => 'Renamed Later',
+        ]);
+
+        $undone = $this->service->undo($transaction->fresh());
+
+        $this->assertSame(Bucket::Want, $undone->bucket);
+        $this->assertSame('Original Treats', $undone->subcategory);
+        $this->assertSame($category->id, $undone->category_id);
     }
 
     #[TestDox('Undo on a factory-reviewed transaction without audit clears review without inventing a bucket')]
