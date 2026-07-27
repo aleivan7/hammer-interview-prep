@@ -15,6 +15,7 @@ final readonly class CategorizationResult
         public string $explanation,
         public bool $autoReview,
         public ?int $ruleId = null,
+        public ?int $categoryId = null,
     ) {}
 
     public function isConfident(int $threshold = 85): bool

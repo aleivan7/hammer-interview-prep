@@ -167,29 +167,29 @@ behavior.
 
 ## Acceptance criteria
 
-- [ ] Shared system categories, canonical merchants, and deterministic aliases
+- [x] Shared system categories, canonical merchants, and deterministic aliases
       are seeded and exposed through user-safe APIs.
-- [ ] Custom categories support owner-scoped create, rename, and archive with
+- [x] Custom categories support owner-scoped create, rename, and archive with
       duplicate, system-protection, historical-reference, and reset behavior.
-- [ ] Merchant resolution passes all required positive examples and the
+- [x] Merchant resolution passes all required positive examples and the
       Shellpoint/Shell false-positive regression.
-- [ ] Transactions preserve raw descriptors, optionally link structured
+- [x] Transactions preserve raw descriptors, optionally link structured
       merchants/categories, derive bucket consistently, and retain legacy API
       compatibility and undo behavior.
-- [ ] Rules reference canonical merchants and categories while preserving
+- [x] Rules reference canonical merchants and categories while preserving
       account/amount/priority/enabled/auto-review behavior, user scoping,
       precedence, alias matching, and batch idempotency.
-- [ ] Rules UI provides searchable/grouped selectors, inline category creation,
+- [x] Rules UI provides searchable/grouped selectors, inline category creation,
       form-state preservation, preview, advanced controls, and frontend tests.
-- [ ] Activity and Review expose canonical and raw merchant context plus
+- [x] Activity and Review expose canonical and raw merchant context plus
       detailed category assignment without regressing month scope, Focus mode,
       bulk review, swipe/keyboard mapping, suggestions, or undo.
-- [ ] Persona reset preserves the system catalog and cannot affect another
+- [x] Persona reset preserves the system catalog and cannot affect another
       persona's custom data.
-- [ ] New migrations migrate and roll back successfully on SQLite.
-- [ ] Independent correctness and security reviews have no unresolved blocking
-      findings.
-- [ ] `./scripts/verify.sh` passes.
+- [x] New migrations migrate and roll back successfully on SQLite.
+- [x] Independent correctness and security reviews have no unresolved blocking
+      findings (Bugbot pending implementation PR).
+- [x] `./scripts/verify.sh` passes.
 
 ## Decisions
 

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, shallowRef, watch } from 'vue'
+import { fetchCategories } from '../api/categoryApi'
 import { runSmartReview } from '../api/smartReviewApi'
 import {
   fetchReviewQueue,
@@ -14,10 +15,17 @@ import EmptyState from '../components/ui/EmptyState.vue'
 import PageHeader from '../components/ui/PageHeader.vue'
 import SkeletonBlock from '../components/ui/SkeletonBlock.vue'
 import type { Bucket } from '../types/bucket'
+import type { Category } from '../types/category'
 import type { SmartReviewResult } from '../types/smartReview'
 import type { Transaction, TransactionSuggestion } from '../types/transaction'
 
+type ReviewCategorizePayload = {
+  bucket: Bucket
+  category_id?: number | null
+}
+
 const transactions = shallowRef<Transaction[]>([])
+const categories = shallowRef<Category[]>([])
 const activeMonthKey = shallowRef<string | null>(null)
 const loading = shallowRef(true)
 const updating = shallowRef(false)
@@ -219,7 +227,7 @@ function openFocus(startId?: number): void {
   focusOpen.value = true
 }
 
-async function categorize(bucket: Bucket): Promise<void> {
+async function categorize(payload: ReviewCategorizePayload): Promise<void> {
   const transaction = currentFocusTransaction.value
   if (!transaction || updating.value) {
     return
@@ -229,7 +237,11 @@ async function categorize(bucket: Bucket): Promise<void> {
   updateError.value = null
 
   try {
-    await updateTransaction(transaction.id, { bucket, reviewed: true })
+    await updateTransaction(transaction.id, {
+      bucket: payload.bucket,
+      ...(payload.category_id !== undefined ? { category_id: payload.category_id } : {}),
+      reviewed: true,
+    })
     transactions.value = transactions.value.filter((item) => item.id !== transaction.id)
     focusQueueIds.value = focusQueueIds.value.filter((id) => id !== transaction.id)
     focusUndoStack.value = [...focusUndoStack.value, transaction.id]
@@ -348,7 +360,7 @@ async function undoBulk(): Promise<void> {
   updating.value = false
 }
 
-async function categorizeOne(id: number, bucket: Bucket): Promise<void> {
+async function categorizeOne(id: number, payload: ReviewCategorizePayload): Promise<void> {
   if (updating.value) {
     return
   }
@@ -357,7 +369,11 @@ async function categorizeOne(id: number, bucket: Bucket): Promise<void> {
   updateError.value = null
 
   try {
-    await updateTransaction(id, { bucket, reviewed: true })
+    await updateTransaction(id, {
+      bucket: payload.bucket,
+      ...(payload.category_id !== undefined ? { category_id: payload.category_id } : {}),
+      reviewed: true,
+    })
     transactions.value = transactions.value.filter((transaction) => transaction.id !== id)
     pruneFocusQueue([id])
     selectedIds.value = selectedIds.value.filter((selectedId) => selectedId !== id)
@@ -393,6 +409,13 @@ watch(currentFocusTransaction, (transaction) => {
 })
 
 onMounted(() => {
+  void fetchCategories()
+    .then((loaded) => {
+      categories.value = loaded
+    })
+    .catch(() => {
+      categories.value = []
+    })
   void loadTransactions(null)
 })
 </script>
@@ -497,6 +520,7 @@ onMounted(() => {
         v-if="activeMonthTransactions.length"
         :key="activeMonthKey ?? undefined"
         :transactions="activeMonthTransactions"
+        :categories="categories"
         :month-label="activeMonthLabel"
         :selected-ids="selectedIds"
         :updating="updating"
@@ -537,6 +561,7 @@ onMounted(() => {
       v-if="focusOpen"
       :transaction="currentFocusTransaction"
       :suggestion="suggestion"
+      :categories="categories"
       :month-label="activeMonthLabel"
       :progress-label="focusProgressLabel"
       :updating="updating"

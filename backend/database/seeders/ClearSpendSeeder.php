@@ -10,6 +10,8 @@ class ClearSpendSeeder extends Seeder
 {
     public function run(): void
     {
+        $this->call(CatalogSeeder::class);
+
         app(DemoPersonaDataService::class)->seedAllPersonas(
             Carbon::parse('2026-07-25')->startOfDay(),
         );

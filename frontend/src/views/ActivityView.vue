@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { onMounted, ref, shallowRef, watch } from 'vue'
+import { onMounted, shallowRef, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { fetchAccounts } from '../api/accountApi'
+import { createCategory, fetchCategories } from '../api/categoryApi'
 import {
   createTransaction,
   fetchTransactions,
@@ -15,21 +16,23 @@ import AppIcon from '../components/ui/AppIcon.vue'
 import PageHeader from '../components/ui/PageHeader.vue'
 import type { Account } from '../types/account'
 import type { Bucket } from '../types/bucket'
+import type { Category } from '../types/category'
 import type { Transaction } from '../types/transaction'
 import { downloadTransactionsCsv } from '../utils/csv'
 
 const route = useRoute()
 const transactions = shallowRef<Transaction[]>([])
 const accounts = shallowRef<Account[]>([])
+const categories = shallowRef<Category[]>([])
 const loading = shallowRef(true)
 const saving = shallowRef(false)
 const error = shallowRef<string | null>(null)
 const dialogOpen = shallowRef(false)
 const editing = shallowRef<Transaction | null>(null)
 
-const search = ref('')
-const bucket = ref<'' | Bucket>('')
-const reviewed = ref<'' | 'true' | 'false'>('')
+const search = shallowRef('')
+const bucket = shallowRef<'' | Bucket>('')
+const reviewed = shallowRef<'' | 'true' | 'false'>('')
 
 async function load(): Promise<void> {
   loading.value = true
@@ -65,6 +68,17 @@ function clearFilters(): void {
   reviewed.value = ''
 }
 
+async function handleCreateCategory(payload: { name: string; bucket: Bucket }): Promise<void> {
+  try {
+    const category = await createCategory(payload)
+    if (!categories.value.some((item) => item.id === category.id)) {
+      categories.value = [...categories.value, category]
+    }
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Failed to create category.'
+  }
+}
+
 async function handleSubmit(payload: {
   merchant: string
   amount_cents: number
@@ -72,7 +86,8 @@ async function handleSubmit(payload: {
   transaction_date: string
   account_id: number | null
   bucket: Bucket | null
-  subcategory: string | null
+  category_id?: number | null
+  subcategory?: string | null
   notes: string | null
   reviewed?: boolean
 }): Promise<void> {
@@ -88,7 +103,12 @@ async function handleSubmit(payload: {
         transaction_date: payload.transaction_date,
         account_id: payload.account_id,
         bucket: payload.bucket,
-        subcategory: payload.subcategory,
+        ...(payload.category_id === undefined
+          ? {}
+          : {
+              category_id: payload.category_id,
+              subcategory: payload.subcategory,
+            }),
         notes: payload.notes,
         reviewed: payload.reviewed,
       })
@@ -112,9 +132,15 @@ watch([search, bucket, reviewed], () => {
 
 onMounted(async () => {
   try {
-    accounts.value = await fetchAccounts()
+    const [loadedAccounts, loadedCategories] = await Promise.all([
+      fetchAccounts(),
+      fetchCategories(),
+    ])
+    accounts.value = loadedAccounts
+    categories.value = loadedCategories
   } catch {
     accounts.value = []
+    categories.value = []
   }
 
   await load()
@@ -175,10 +201,12 @@ onMounted(async () => {
     <TransactionFormDialog
       :open="dialogOpen"
       :accounts="accounts"
+      :categories="categories"
       :transaction="editing"
       :saving="saving"
       @close="dialogOpen = false"
       @submit="handleSubmit"
+      @create-category="handleCreateCategory"
     />
   </div>
 </template>

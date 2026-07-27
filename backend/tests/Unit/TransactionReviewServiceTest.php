@@ -4,11 +4,14 @@ namespace Tests\Unit;
 
 use App\Enums\Bucket;
 use App\Enums\ReviewSource;
+use App\Models\Category;
+use App\Models\Merchant;
 use App\Models\ReviewAudit;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Services\TransactionReviewService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\TestDox;
 use Tests\TestCase;
@@ -78,6 +81,99 @@ class TransactionReviewServiceTest extends TestCase
         $this->assertNotNull($undoAudit);
         $this->assertSame('want', $undoAudit->previous_state['bucket'] ?? null);
         $this->assertSame('dining', $undoAudit->previous_state['subcategory'] ?? null);
+    }
+
+    #[TestDox('Undo restores an audited canonical merchant link without re-resolving it')]
+    public function test_undo_restores_audited_merchant_link(): void
+    {
+        $user = User::factory()->average()->create();
+        $netflix = Merchant::query()->where('normalized_name', 'netflix')->firstOrFail();
+        $transaction = Transaction::factory()->for($user)->unreviewed()->create([
+            'merchant' => 'Mystery Descriptor',
+            'raw_merchant_descriptor' => 'Mystery Descriptor',
+            'bucket' => Bucket::Want,
+        ]);
+        DB::table('transactions')->where('id', $transaction->id)->update([
+            'merchant_id' => $netflix->id,
+        ]);
+        $transaction->refresh();
+
+        $this->service->review(
+            transaction: $transaction,
+            bucket: Bucket::Want,
+            subcategory: null,
+            source: ReviewSource::Manual,
+        );
+        $transaction->refresh()->update(['merchant' => 'Another Unknown Descriptor']);
+        $this->assertNull($transaction->fresh()->merchant_id);
+
+        $undone = $this->service->undo($transaction->fresh());
+
+        $this->assertSame('Mystery Descriptor', $undone->merchant);
+        $this->assertSame('Mystery Descriptor', $undone->raw_merchant_descriptor);
+        $this->assertSame($netflix->id, $undone->merchant_id);
+    }
+
+    #[TestDox('Undo restores a category link using the category’s current fields')]
+    public function test_undo_restores_category_link_with_current_category_fields(): void
+    {
+        $user = User::factory()->average()->create();
+        $category = Category::factory()->for($user)->create([
+            'bucket' => Bucket::Want,
+            'name' => 'Original Treats',
+        ]);
+        $transaction = Transaction::factory()->for($user)->unreviewed()->create([
+            'category_id' => $category->id,
+        ]);
+
+        $this->service->review(
+            transaction: $transaction,
+            bucket: Bucket::Need,
+            subcategory: null,
+            source: ReviewSource::Manual,
+            categoryId: null,
+        );
+        $category->update([
+            'bucket' => Bucket::Savings,
+            'name' => 'Renamed Later',
+        ]);
+
+        $undone = $this->service->undo($transaction->fresh());
+
+        $this->assertSame(Bucket::Savings, $undone->bucket);
+        $this->assertSame('Renamed Later', $undone->subcategory);
+        $this->assertSame($category->id, $undone->category_id);
+    }
+
+    #[TestDox('Review uses the category display name consistently in the transaction and audit')]
+    public function test_review_canonicalizes_category_fields_for_transaction_and_audit(): void
+    {
+        $user = User::factory()->average()->create();
+        $category = Category::factory()->for($user)->create([
+            'bucket' => Bucket::Want,
+            'name' => 'Coffee Treats',
+        ]);
+        $transaction = Transaction::factory()->for($user)->unreviewed()->create();
+
+        $reviewed = $this->service->review(
+            transaction: $transaction,
+            bucket: Bucket::Need,
+            subcategory: 'coffee treats',
+            source: ReviewSource::Rule,
+            categoryId: $category->id,
+        );
+
+        $audit = ReviewAudit::query()
+            ->where('transaction_id', $transaction->id)
+            ->where('action', 'review')
+            ->latest('id')
+            ->firstOrFail();
+
+        $this->assertSame(Bucket::Want, $reviewed->bucket);
+        $this->assertSame('Coffee Treats', $reviewed->subcategory);
+        $this->assertSame($category->id, $reviewed->category_id);
+        $this->assertSame(Bucket::Want, $audit->bucket);
+        $this->assertSame('Coffee Treats', $audit->subcategory);
     }
 
     #[TestDox('Undo on a factory-reviewed transaction without audit clears review without inventing a bucket')]

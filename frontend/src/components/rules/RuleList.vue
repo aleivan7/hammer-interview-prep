@@ -14,6 +14,14 @@ const emit = defineEmits<{
   remove: [rule: CategorizationRule]
 }>()
 
+function merchantLabel(rule: CategorizationRule): string {
+  return rule.canonical_merchant?.name ?? rule.merchant_contains ?? 'Unknown merchant'
+}
+
+function categoryLabel(rule: CategorizationRule): string {
+  return rule.target_category?.name ?? rule.target_subcategory ?? 'Uncategorized'
+}
+
 function amountLabel(rule: CategorizationRule): string {
   if (rule.amount_cents_min == null && rule.amount_cents_max == null) {
     return 'Any amount'
@@ -32,13 +40,13 @@ function amountLabel(rule: CategorizationRule): string {
         <div class="copy">
           <strong>{{ rule.name }}</strong>
           <p>
-            merchant contains “{{ rule.merchant_contains }}” · {{ amountLabel(rule) }}
+            {{ merchantLabel(rule) }} → {{ categoryLabel(rule) }} · {{ amountLabel(rule) }}
           </p>
         </div>
 
         <div class="middle">
           <BucketPill :bucket="rule.target_bucket" />
-          <span v-if="rule.target_subcategory" class="sub">{{ rule.target_subcategory }}</span>
+          <span class="sub">{{ categoryLabel(rule) }}</span>
           <span class="sr-only">{{ BUCKET_LABELS[rule.target_bucket] }}</span>
         </div>
 

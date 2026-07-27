@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { onMounted, shallowRef } from 'vue'
 import { fetchAccounts } from '../api/accountApi'
+import { fetchCategories } from '../api/categoryApi'
+import { fetchMerchants } from '../api/merchantApi'
 import { createRule, deleteRule, fetchRules, updateRule } from '../api/rulesApi'
 import RuleForm from '../components/rules/RuleForm.vue'
 import RuleList from '../components/rules/RuleList.vue'
@@ -8,17 +10,21 @@ import AppIcon from '../components/ui/AppIcon.vue'
 import EmptyState from '../components/ui/EmptyState.vue'
 import PageHeader from '../components/ui/PageHeader.vue'
 import type { Account } from '../types/account'
-import type { CategorizationRule } from '../types/rule'
+import type { Category } from '../types/category'
+import type { Merchant } from '../types/merchant'
+import type { CategorizationRule, StoreCategorizationRulePayload } from '../types/rule'
 
 const rules = shallowRef<CategorizationRule[]>([])
 const accounts = shallowRef<Account[]>([])
+const merchants = shallowRef<Merchant[]>([])
+const categories = shallowRef<Category[]>([])
 const loading = shallowRef(true)
 const saving = shallowRef(false)
 const error = shallowRef<string | null>(null)
 const showForm = shallowRef(false)
 const editing = shallowRef<CategorizationRule | null>(null)
 
-async function load(): Promise<void> {
+async function loadRules(): Promise<void> {
   loading.value = true
   error.value = null
 
@@ -41,18 +47,13 @@ function openEdit(rule: CategorizationRule): void {
   showForm.value = true
 }
 
-async function handleSubmit(payload: {
-  name: string
-  merchant_contains: string
-  account_id: number | null
-  amount_cents_min: number | null
-  amount_cents_max: number | null
-  target_bucket: CategorizationRule['target_bucket']
-  target_subcategory: string | null
-  priority: number
-  enabled: boolean
-  auto_review: boolean
-}): Promise<void> {
+function onCategoryCreated(category: Category): void {
+  if (!categories.value.some((item) => item.id === category.id)) {
+    categories.value = [...categories.value, category]
+  }
+}
+
+async function handleSubmit(payload: StoreCategorizationRulePayload): Promise<void> {
   saving.value = true
   error.value = null
 
@@ -65,7 +66,7 @@ async function handleSubmit(payload: {
 
     showForm.value = false
     editing.value = null
-    await load()
+    await loadRules()
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Failed to save rule.'
   } finally {
@@ -82,7 +83,7 @@ async function handleRemove(rule: CategorizationRule): Promise<void> {
 
   try {
     await deleteRule(rule.id)
-    await load()
+    await loadRules()
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Failed to delete rule.'
   }
@@ -90,12 +91,21 @@ async function handleRemove(rule: CategorizationRule): Promise<void> {
 
 onMounted(async () => {
   try {
-    accounts.value = await fetchAccounts()
+    const [loadedAccounts, loadedMerchants, loadedCategories] = await Promise.all([
+      fetchAccounts(),
+      fetchMerchants(),
+      fetchCategories(),
+    ])
+    accounts.value = loadedAccounts
+    merchants.value = loadedMerchants
+    categories.value = loadedCategories
   } catch {
     accounts.value = []
+    merchants.value = []
+    categories.value = []
   }
 
-  await load()
+  await loadRules()
 })
 </script>
 
@@ -119,10 +129,13 @@ onMounted(async () => {
     <RuleForm
       v-if="showForm"
       :accounts="accounts"
+      :merchants="merchants"
+      :categories="categories"
       :rule="editing"
       :saving="saving"
       @cancel="showForm = false"
       @submit="handleSubmit"
+      @category-created="onCategoryCreated"
     />
 
     <RuleList
