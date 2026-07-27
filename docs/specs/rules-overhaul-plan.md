@@ -432,6 +432,7 @@ Evidence:
   `cursor-app-control` and `cursor-ide-browser`; reload Cursor before TASK-001
   so required Boost schema, route, and version-aware documentation tools are
   available to the implementation agent.
-- Clean-baseline status remains pending until the approved specification and
-  workflow documentation receive a user-authorized commit on
-  `feature/rules-overhaul`.
+- 2026-07-27 — approved workflow committed locally as `4eee384`, followed by
+  `./scripts/verify.sh` — pass with the same 109 PHPUnit tests, 742 assertions,
+  75 Vitest tests, typecheck, build, and a clean `feature/rules-overhaul`
+  working tree.
