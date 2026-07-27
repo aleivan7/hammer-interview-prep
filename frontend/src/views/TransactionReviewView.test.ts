@@ -391,6 +391,58 @@ describe('TransactionReviewView', () => {
     })
   })
 
+  it('categorizes Savings with ArrowDown and shows Focus completion for the last card', async () => {
+    vi.mocked(fetchReviewQueue).mockResolvedValue([olderMonthTransaction, firstTransaction])
+    vi.mocked(updateTransaction).mockResolvedValue({
+      ...firstTransaction,
+      bucket: 'savings',
+      reviewed: true,
+    })
+
+    const wrapper = mount(TransactionReviewView)
+    await flushPromises()
+
+    await buttonContaining(wrapper, 'Start Focus mode').trigger('click')
+    await flushPromises()
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }))
+    await completeFocusExit()
+    await flushPromises()
+
+    expect(updateTransaction).toHaveBeenCalledWith(1, {
+      bucket: 'savings',
+      reviewed: true,
+    })
+
+    const dialog = wrapper.get('[role="dialog"]')
+    expect(dialog.text()).toContain('Month complete')
+    expect(dialog.text()).toContain('1 of 1 reviewed')
+    expect(dialog.text()).toContain('Return to month')
+
+    await buttonContaining(dialog, 'Return to month').trigger('click')
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('July 2026 is complete')
+  })
+
+  it('does not rotate Focus when Skip is pressed with a single remaining transaction', async () => {
+    vi.mocked(fetchReviewQueue).mockResolvedValue([firstTransaction])
+
+    const wrapper = mount(TransactionReviewView)
+    await flushPromises()
+
+    await buttonContaining(wrapper, 'Start Focus mode').trigger('click')
+    await flushPromises()
+
+    const dialog = wrapper.get('[role="dialog"]')
+    expect(dialog.text()).toContain('HEB')
+    expect(dialog.text()).toContain('Transaction 1 of 1')
+
+    await buttonContaining(dialog, 'Skip').trigger('click')
+
+    expect(dialog.text()).toContain('HEB')
+    expect(dialog.text()).toContain('Transaction 1 of 1')
+  })
+
   it('bulk categorizes selected transactions, preserves failures, and supports undo', async () => {
     vi.mocked(fetchReviewQueue).mockResolvedValue([firstTransaction, secondTransaction])
     vi.mocked(updateTransaction).mockImplementation(async (id) => {
