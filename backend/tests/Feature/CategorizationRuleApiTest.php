@@ -303,6 +303,29 @@ class CategorizationRuleApiTest extends TestCase
         ]);
     }
 
+    #[TestDox('Create and update derive merchant_contains when explicitly null')]
+    public function test_null_merchant_contains_is_derived_from_merchant(): void
+    {
+        $create = $this->postJson('/api/rules', [
+            'name' => 'Derived merchant text',
+            'merchant_id' => $this->netflix->id,
+            'merchant_contains' => null,
+            'category_id' => $this->entertainment->id,
+        ]);
+
+        $create->assertCreated()
+            ->assertJsonPath('data.merchant_contains', 'netflix');
+
+        $landlord = Merchant::query()->where('normalized_name', 'landlord llc')->firstOrFail();
+        $this->patchJson("/api/rules/{$create->json('data.id')}", [
+            'merchant_id' => $landlord->id,
+            'merchant_contains' => null,
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.merchant_id', $landlord->id)
+            ->assertJsonPath('data.merchant_contains', 'landlord llc');
+    }
+
     #[TestDox('A user cannot update another user’s categorization rule')]
     public function test_user_cannot_update_another_users_rule(): void
     {

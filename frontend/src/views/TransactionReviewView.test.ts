@@ -143,6 +143,7 @@ beforeEach(() => {
   vi.mocked(fetchTransactionSuggestion).mockResolvedValue({
     bucket: 'need',
     subcategory: 'groceries',
+    category_id: null,
     confidence: 86,
     source: 'heuristic',
     explanation: 'Heuristic match for merchant containing "heb".',

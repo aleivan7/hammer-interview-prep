@@ -79,6 +79,7 @@ export interface StoreTransactionPayload {
 export interface TransactionSuggestion {
   bucket: Bucket | null
   subcategory: string | null
+  category_id: number | null
   confidence: number
   source: string
   explanation: string

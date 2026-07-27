@@ -206,6 +206,7 @@ class TransactionController extends Controller
             'data' => [
                 'bucket' => $result->bucket?->value,
                 'subcategory' => $result->subcategory,
+                'category_id' => $result->categoryId,
                 'confidence' => $result->confidence,
                 'source' => $result->source->value,
                 'explanation' => $result->explanation,

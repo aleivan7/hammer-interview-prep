@@ -84,7 +84,10 @@ class CategorizationRuleController extends Controller
             ? $data['merchant_id']
             : $existing?->merchant_id;
 
-        if (array_key_exists('merchant_id', $data) && ! array_key_exists('merchant_contains', $data) && $merchantId !== null) {
+        if (
+            $merchantId !== null
+            && (! array_key_exists('merchant_contains', $data) || blank($data['merchant_contains']))
+        ) {
             $merchant = Merchant::query()->findOrFail($merchantId);
             $data['merchant_contains'] = mb_strtolower($merchant->name);
         }
