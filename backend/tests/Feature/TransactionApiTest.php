@@ -68,6 +68,75 @@ class TransactionApiTest extends TestCase
         $response->assertJsonPath('data.1.id', $newer->id);
     }
 
+    #[TestDox('Index search, bucket, reviewed, and account_id filters combine without leaking foreign accounts')]
+    public function test_index_filters_combine_and_foreign_account_id_returns_empty(): void
+    {
+        $checking = Account::factory()->for($this->user)->create(['name' => 'Checking']);
+        $savings = Account::factory()->for($this->user)->create(['name' => 'Savings']);
+        $other = User::factory()->reckless()->create();
+        $foreignAccount = Account::factory()->for($other)->create(['name' => 'Foreign Checking']);
+
+        $match = Transaction::factory()->for($this->user)->reviewed()->create([
+            'account_id' => $checking->id,
+            'merchant' => 'HEB Market',
+            'bucket' => Bucket::Need,
+            'transaction_date' => '2026-07-12',
+        ]);
+        Transaction::factory()->for($this->user)->reviewed()->create([
+            'account_id' => $checking->id,
+            'merchant' => 'Starbucks',
+            'bucket' => Bucket::Want,
+            'transaction_date' => '2026-07-11',
+        ]);
+        Transaction::factory()->for($this->user)->unreviewed()->create([
+            'account_id' => $checking->id,
+            'merchant' => 'HEB Express',
+            'transaction_date' => '2026-07-10',
+        ]);
+        Transaction::factory()->for($this->user)->reviewed()->create([
+            'account_id' => $savings->id,
+            'merchant' => 'HEB Market',
+            'bucket' => Bucket::Need,
+            'transaction_date' => '2026-07-09',
+        ]);
+        Transaction::factory()->for($other)->reviewed()->create([
+            'account_id' => $foreignAccount->id,
+            'merchant' => 'HEB Market',
+            'bucket' => Bucket::Need,
+            'transaction_date' => '2026-07-08',
+        ]);
+
+        $filtered = $this->getJson(
+            '/api/transactions?search=HEB&bucket=need&reviewed=1&account_id='.$checking->id.'&paginate=0',
+        );
+
+        $filtered->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $match->id);
+
+        $this->getJson('/api/transactions?account_id='.$foreignAccount->id.'&paginate=0')
+            ->assertOk()
+            ->assertJsonCount(0, 'data');
+    }
+
+    #[TestDox('Index paginates by default and returns the full set when paginate=false')]
+    public function test_index_paginates_by_default_and_can_return_full_collection(): void
+    {
+        Transaction::factory()->for($this->user)->count(26)->create([
+            'transaction_date' => '2026-07-01',
+        ]);
+
+        $paginated = $this->getJson('/api/transactions');
+        $paginated->assertOk()
+            ->assertJsonCount(25, 'data')
+            ->assertJsonPath('meta.per_page', 25)
+            ->assertJsonPath('meta.total', 26);
+
+        $all = $this->getJson('/api/transactions?paginate=0');
+        $all->assertOk()->assertJsonCount(26, 'data');
+        $this->assertArrayNotHasKey('meta', $all->json());
+    }
+
     #[TestDox('Patch with a valid category sets the transaction bucket')]
     public function test_patch_with_valid_category_updates_bucket(): void
     {
