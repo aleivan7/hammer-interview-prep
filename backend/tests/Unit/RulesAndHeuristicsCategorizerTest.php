@@ -8,6 +8,7 @@ use App\Enums\TransactionKind;
 use App\Models\Account;
 use App\Models\CategorizationRule;
 use App\Models\Transaction;
+use App\Models\User;
 use App\Services\RulesAndHeuristicsCategorizer;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use PHPUnit\Framework\Attributes\TestDox;
@@ -22,17 +23,21 @@ class RulesAndHeuristicsCategorizerTest extends TestCase
 
     private RulesAndHeuristicsCategorizer $categorizer;
 
+    private User $user;
+
     protected function setUp(): void
     {
         parent::setUp();
 
         $this->categorizer = app(RulesAndHeuristicsCategorizer::class);
+        $this->user = User::factory()->create();
     }
 
     #[TestDox('Skips disabled rules and falls through to heuristics')]
     public function test_disabled_rules_are_ignored(): void
     {
         CategorizationRule::factory()->create([
+            'user_id' => $this->user->id,
             'name' => 'Disabled HEB need',
             'merchant_contains' => 'heb',
             'target_bucket' => Bucket::Want,
@@ -43,6 +48,7 @@ class RulesAndHeuristicsCategorizerTest extends TestCase
         ]);
 
         $transaction = Transaction::factory()->unreviewed()->create([
+            'user_id' => $this->user->id,
             'merchant' => 'HEB Market',
             'kind' => TransactionKind::Expense,
         ]);
@@ -59,10 +65,11 @@ class RulesAndHeuristicsCategorizerTest extends TestCase
     #[TestDox('Ignores account-scoped rules when the transaction account does not match')]
     public function test_account_scoped_rules_require_matching_account(): void
     {
-        $checking = Account::factory()->create();
-        $savings = Account::factory()->create();
+        $checking = Account::factory()->create(['user_id' => $this->user->id]);
+        $savings = Account::factory()->create(['user_id' => $this->user->id]);
 
         CategorizationRule::factory()->create([
+            'user_id' => $this->user->id,
             'name' => 'Checking-only rent',
             'merchant_contains' => 'landlord',
             'account_id' => $checking->id,
@@ -73,12 +80,14 @@ class RulesAndHeuristicsCategorizerTest extends TestCase
         ]);
 
         $mismatch = Transaction::factory()->unreviewed()->create([
+            'user_id' => $this->user->id,
             'merchant' => 'Landlord LLC',
             'account_id' => $savings->id,
             'kind' => TransactionKind::Expense,
         ]);
 
         $match = Transaction::factory()->unreviewed()->create([
+            'user_id' => $this->user->id,
             'merchant' => 'Landlord LLC',
             'account_id' => $checking->id,
             'kind' => TransactionKind::Expense,
@@ -100,6 +109,7 @@ class RulesAndHeuristicsCategorizerTest extends TestCase
     public function test_amount_bounds_filter_rule_matches(): void
     {
         CategorizationRule::factory()->create([
+            'user_id' => $this->user->id,
             'name' => 'Exact rent',
             'merchant_contains' => 'property',
             'amount_cents_min' => 165_000,
@@ -111,14 +121,17 @@ class RulesAndHeuristicsCategorizerTest extends TestCase
         ]);
 
         $tooLow = Transaction::factory()->unreviewed()->create([
+            'user_id' => $this->user->id,
             'merchant' => 'Property Management',
             'amount_cents' => 164_999,
         ]);
         $exact = Transaction::factory()->unreviewed()->create([
+            'user_id' => $this->user->id,
             'merchant' => 'Property Management',
             'amount_cents' => 165_000,
         ]);
         $tooHigh = Transaction::factory()->unreviewed()->create([
+            'user_id' => $this->user->id,
             'merchant' => 'Property Management',
             'amount_cents' => 165_001,
         ]);
@@ -136,6 +149,7 @@ class RulesAndHeuristicsCategorizerTest extends TestCase
     public function test_merchant_contains_is_case_insensitive(): void
     {
         CategorizationRule::factory()->create([
+            'user_id' => $this->user->id,
             'merchant_contains' => 'HeB',
             'target_bucket' => Bucket::Need,
             'target_subcategory' => 'groceries',
@@ -143,6 +157,7 @@ class RulesAndHeuristicsCategorizerTest extends TestCase
         ]);
 
         $transaction = Transaction::factory()->unreviewed()->create([
+            'user_id' => $this->user->id,
             'merchant' => 'heb MARKET',
         ]);
 
@@ -157,10 +172,12 @@ class RulesAndHeuristicsCategorizerTest extends TestCase
     public function test_transfer_and_income_heuristics_auto_review(): void
     {
         $transfer = Transaction::factory()->unreviewed()->create([
+            'user_id' => $this->user->id,
             'merchant' => 'Internal Transfer',
             'kind' => TransactionKind::Transfer,
         ]);
         $income = Transaction::factory()->unreviewed()->create([
+            'user_id' => $this->user->id,
             'merchant' => 'Acme Payroll',
             'kind' => TransactionKind::Income,
         ]);
@@ -183,6 +200,7 @@ class RulesAndHeuristicsCategorizerTest extends TestCase
     public function test_dining_heuristic_is_below_auto_review_threshold(): void
     {
         $transaction = Transaction::factory()->unreviewed()->create([
+            'user_id' => $this->user->id,
             'merchant' => 'Chipotle Downtown',
             'kind' => TransactionKind::Expense,
         ]);
