@@ -77,12 +77,14 @@ class CategoryController extends Controller
             if ($category->wasChanged(['name', 'bucket'])) {
                 Transaction::query()
                     ->where('category_id', $category->id)
+                    ->where('user_id', $this->demoUser->id())
                     ->update([
                         'bucket' => $category->bucket->value,
                         'subcategory' => $category->name,
                     ]);
                 CategorizationRule::query()
                     ->where('category_id', $category->id)
+                    ->where('user_id', $this->demoUser->id())
                     ->update([
                         'target_bucket' => $category->bucket->value,
                         'target_subcategory' => $category->normalized_name,

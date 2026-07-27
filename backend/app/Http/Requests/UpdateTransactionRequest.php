@@ -99,8 +99,12 @@ class UpdateTransactionRequest extends FormRequest
             return false;
         }
 
-        if ($this->exists('bucket') || $this->exists('category') || $this->exists('category_id')) {
+        if ($this->exists('bucket') || $this->exists('category')) {
             return true;
+        }
+
+        if ($this->exists('category_id')) {
+            return ! $transaction instanceof Transaction || $transaction->bucket === null;
         }
 
         return ! $transaction instanceof Transaction || $transaction->bucket === null;

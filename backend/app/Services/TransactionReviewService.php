@@ -55,6 +55,7 @@ final class TransactionReviewService
                 'bucket' => $transaction->bucket?->value,
                 'subcategory' => $transaction->subcategory,
                 'category_id' => $transaction->category_id,
+                'merchant' => $transaction->merchant,
                 'raw_merchant_descriptor' => $transaction->raw_merchant_descriptor,
                 'merchant_id' => $transaction->merchant_id,
                 'reviewed_at' => $transaction->reviewed_at?->toISOString(),
@@ -106,11 +107,23 @@ final class TransactionReviewService
             $previous = $audit?->previous_state ?? [];
             $rawDescriptor = $transaction->raw_merchant_descriptor;
             $merchantId = $transaction->merchant_id;
+            $categoryId = $previous['category_id'] ?? null;
+            $bucket = $previous['bucket'] ?? null;
+            $subcategory = $previous['subcategory'] ?? null;
+
+            if ($categoryId !== null) {
+                $category = Category::query()->find($categoryId);
+                if ($category !== null) {
+                    $bucket = $category->bucket->value;
+                    $subcategory = $category->name;
+                }
+            }
 
             $transaction->fill([
-                'bucket' => $previous['bucket'] ?? null,
-                'subcategory' => $previous['subcategory'] ?? null,
-                'category_id' => $previous['category_id'] ?? null,
+                'bucket' => $bucket,
+                'subcategory' => $subcategory,
+                'category_id' => $categoryId,
+                'merchant' => $previous['merchant'] ?? $transaction->merchant,
                 'raw_merchant_descriptor' => $previous['raw_merchant_descriptor'] ?? $rawDescriptor,
                 'merchant_id' => array_key_exists('merchant_id', $previous) ? $previous['merchant_id'] : $merchantId,
                 'reviewed_at' => null,

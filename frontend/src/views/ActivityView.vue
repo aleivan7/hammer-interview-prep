@@ -86,8 +86,8 @@ async function handleSubmit(payload: {
   transaction_date: string
   account_id: number | null
   bucket: Bucket | null
-  category_id: number | null
-  subcategory: string | null
+  category_id?: number | null
+  subcategory?: string | null
   notes: string | null
   reviewed?: boolean
 }): Promise<void> {
@@ -103,8 +103,12 @@ async function handleSubmit(payload: {
         transaction_date: payload.transaction_date,
         account_id: payload.account_id,
         bucket: payload.bucket,
-        category_id: payload.category_id,
-        subcategory: payload.subcategory,
+        ...(payload.category_id === undefined
+          ? {}
+          : {
+              category_id: payload.category_id,
+              subcategory: payload.subcategory,
+            }),
         notes: payload.notes,
         reviewed: payload.reviewed,
       })

@@ -104,19 +104,18 @@ class TransactionReviewServiceTest extends TestCase
             subcategory: null,
             source: ReviewSource::Manual,
         );
-        $transaction->refresh()->update([
-            'raw_merchant_descriptor' => 'Another Unknown Descriptor',
-        ]);
+        $transaction->refresh()->update(['merchant' => 'Another Unknown Descriptor']);
         $this->assertNull($transaction->fresh()->merchant_id);
 
         $undone = $this->service->undo($transaction->fresh());
 
+        $this->assertSame('Mystery Descriptor', $undone->merchant);
         $this->assertSame('Mystery Descriptor', $undone->raw_merchant_descriptor);
         $this->assertSame($netflix->id, $undone->merchant_id);
     }
 
-    #[TestDox('Undo restores the audited category snapshot after the category changes')]
-    public function test_undo_restores_audited_category_snapshot(): void
+    #[TestDox('Undo restores a category link using the category’s current fields')]
+    public function test_undo_restores_category_link_with_current_category_fields(): void
     {
         $user = User::factory()->average()->create();
         $category = Category::factory()->for($user)->create([
@@ -141,8 +140,8 @@ class TransactionReviewServiceTest extends TestCase
 
         $undone = $this->service->undo($transaction->fresh());
 
-        $this->assertSame(Bucket::Want, $undone->bucket);
-        $this->assertSame('Original Treats', $undone->subcategory);
+        $this->assertSame(Bucket::Savings, $undone->bucket);
+        $this->assertSame('Renamed Later', $undone->subcategory);
         $this->assertSame($category->id, $undone->category_id);
     }
 

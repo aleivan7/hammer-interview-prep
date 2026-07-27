@@ -49,6 +49,7 @@ function onCreateIntent(bucket: Bucket): void {
       Category
       <select
         class="field"
+        aria-label="Category"
         :value="modelValue ?? ''"
         :disabled="disabled"
         @change="onChange"

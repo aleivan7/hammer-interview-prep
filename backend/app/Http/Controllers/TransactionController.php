@@ -115,6 +115,10 @@ class TransactionController extends Controller
             $attributes['raw_merchant_descriptor'] = $attributes['merchant'];
         }
 
+        if (array_key_exists('subcategory', $attributes) && ! array_key_exists('category_id', $attributes)) {
+            $attributes['category_id'] = null;
+        }
+
         if (array_key_exists('bucket', $attributes) && ! array_key_exists('category_id', $attributes)) {
             if ($attributes['bucket'] === null) {
                 $attributes['category_id'] = null;

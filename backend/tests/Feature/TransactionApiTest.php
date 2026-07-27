@@ -440,6 +440,78 @@ class TransactionApiTest extends TestCase
         ]);
     }
 
+    #[TestDox('Clearing category_id can reuse an existing bucket when marking reviewed')]
+    public function test_review_with_null_category_uses_existing_bucket(): void
+    {
+        $this->seed(CatalogSeeder::class);
+        $dining = Category::query()
+            ->whereNull('user_id')
+            ->where('bucket', Bucket::Want)
+            ->where('normalized_name', 'dining')
+            ->firstOrFail();
+        $transaction = Transaction::factory()->for($this->user)->unreviewed()->create([
+            'bucket' => Bucket::Want,
+            'subcategory' => 'Dining',
+            'category_id' => $dining->id,
+        ]);
+
+        $this->patchJson("/api/transactions/{$transaction->id}", [
+            'category_id' => null,
+            'reviewed' => true,
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.bucket', 'want')
+            ->assertJsonPath('data.category_id', null)
+            ->assertJsonPath('data.subcategory', null);
+    }
+
+    #[TestDox('Review preserves a pre-existing archived category as historical data')]
+    public function test_review_preserves_existing_archived_category_link(): void
+    {
+        $category = Category::factory()->for($this->user)->create([
+            'bucket' => Bucket::Want,
+            'name' => 'Old Treats',
+        ]);
+        $transaction = Transaction::factory()->for($this->user)->unreviewed()->create([
+            'bucket' => Bucket::Want,
+            'subcategory' => 'Old Treats',
+            'category_id' => $category->id,
+        ]);
+        $category->update(['archived_at' => now()]);
+
+        $this->patchJson("/api/transactions/{$transaction->id}", [
+            'reviewed' => true,
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.reviewed', true)
+            ->assertJsonPath('data.category_id', $category->id)
+            ->assertJsonPath('data.detailed_category.archived_at', fn ($value) => $value !== null);
+    }
+
+    #[TestDox('Editing free-text subcategory clears the structured category link')]
+    public function test_subcategory_only_update_clears_category_id(): void
+    {
+        $this->seed(CatalogSeeder::class);
+        $dining = Category::query()
+            ->whereNull('user_id')
+            ->where('bucket', Bucket::Want)
+            ->where('normalized_name', 'dining')
+            ->firstOrFail();
+        $transaction = Transaction::factory()->for($this->user)->unreviewed()->create([
+            'bucket' => Bucket::Want,
+            'subcategory' => 'Dining',
+            'category_id' => $dining->id,
+        ]);
+
+        $this->patchJson("/api/transactions/{$transaction->id}", [
+            'subcategory' => 'Coffee',
+            'reviewed' => false,
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.subcategory', 'Coffee')
+            ->assertJsonPath('data.category_id', null);
+    }
+
     #[TestDox('Patch rejects clearing the bucket while the transaction remains reviewed')]
     public function test_patch_rejects_clearing_bucket_while_transaction_remains_reviewed(): void
     {

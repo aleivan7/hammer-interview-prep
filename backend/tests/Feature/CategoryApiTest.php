@@ -176,6 +176,15 @@ class CategoryApiTest extends TestCase
             'target_bucket' => Bucket::Want,
             'target_subcategory' => 'coffee runs',
         ]);
+        $other = User::factory()->reckless()->create();
+        $foreignTransaction = Transaction::factory()->for($other)->create([
+            'category_id' => $category->id,
+        ]);
+        $foreignRule = CategorizationRule::factory()->for($other)->create([
+            'category_id' => $category->id,
+            'target_bucket' => Bucket::Want,
+            'target_subcategory' => 'coffee runs',
+        ]);
 
         $this->patchJson("/api/categories/{$category->id}", [
             'name' => 'Work Meals',
@@ -196,6 +205,18 @@ class CategoryApiTest extends TestCase
             'category_id' => $category->id,
             'target_bucket' => 'need',
             'target_subcategory' => 'work meals',
+        ]);
+        $this->assertDatabaseHas('transactions', [
+            'id' => $foreignTransaction->id,
+            'user_id' => $other->id,
+            'bucket' => 'want',
+            'subcategory' => 'Coffee Runs',
+        ]);
+        $this->assertDatabaseHas('categorization_rules', [
+            'id' => $foreignRule->id,
+            'user_id' => $other->id,
+            'target_bucket' => 'want',
+            'target_subcategory' => 'coffee runs',
         ]);
     }
 

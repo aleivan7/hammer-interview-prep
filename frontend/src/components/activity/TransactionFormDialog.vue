@@ -8,6 +8,19 @@ import { dollarsInputToCents } from '../../utils/money'
 import CategorySelector from '../rules/CategorySelector.vue'
 import AppIcon from '../ui/AppIcon.vue'
 
+type TransactionFormPayload = {
+  merchant: string
+  amount_cents: number
+  kind: TransactionKind
+  transaction_date: string
+  account_id: number | null
+  bucket: Bucket | null
+  category_id?: number | null
+  subcategory?: string | null
+  notes: string | null
+  reviewed?: boolean
+}
+
 const props = defineProps<{
   open: boolean
   accounts: Account[]
@@ -18,20 +31,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   close: []
-  submit: [
-    payload: {
-      merchant: string
-      amount_cents: number
-      kind: TransactionKind
-      transaction_date: string
-      account_id: number | null
-      bucket: Bucket | null
-      category_id: number | null
-      subcategory: string | null
-      notes: string | null
-      reviewed?: boolean
-    },
-  ]
+  submit: [payload: TransactionFormPayload]
   'create-category': [payload: { name: string; bucket: Bucket }]
 }>()
 
@@ -126,6 +126,15 @@ watch(
   },
 )
 
+watch(
+  () => form.bucket,
+  (bucket) => {
+    if (selectedCategory.value && bucket !== selectedCategory.value.bucket) {
+      form.category_id = null
+    }
+  },
+)
+
 onUnmounted(() => {
   document.body.style.overflow = ''
   window.removeEventListener('keydown', onKeydown)
@@ -154,18 +163,26 @@ function onSubmit(): void {
     return
   }
 
-  emit('submit', {
+  const payload: TransactionFormPayload = {
     merchant: form.merchant.trim(),
     amount_cents: cents,
     kind: form.kind,
     transaction_date: form.transaction_date,
     account_id: form.account_id ? Number(form.account_id) : null,
     bucket: form.bucket || null,
-    category_id: form.category_id,
-    subcategory: selectedCategory.value?.name ?? null,
     notes: form.notes.trim() || null,
     reviewed: form.reviewed,
-  })
+  }
+  const originalCategoryId = props.transaction?.category_id ?? null
+  const categoryChanged = form.category_id !== originalCategoryId
+  const shouldSubmitCategory = props.transaction === null || selectedCategory.value !== null || categoryChanged
+
+  if (shouldSubmitCategory) {
+    payload.category_id = form.category_id
+    payload.subcategory = selectedCategory.value?.name ?? null
+  }
+
+  emit('submit', payload)
 }
 </script>
 
@@ -277,7 +294,7 @@ function onSubmit(): void {
 
       <label>
         Bucket
-        <select v-model="form.bucket" class="field">
+        <select v-model="form.bucket" class="field" aria-label="Bucket">
           <option value="">Uncategorized</option>
           <option value="need">Needs</option>
           <option value="want">Wants</option>
