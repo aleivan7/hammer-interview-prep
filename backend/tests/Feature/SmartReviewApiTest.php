@@ -176,6 +176,50 @@ class SmartReviewApiTest extends TestCase
         ]);
     }
 
+    #[TestDox('Smart Review can re-apply after undo when the same batch key is reused')]
+    public function test_smart_review_reapplies_after_undo_with_same_batch_key(): void
+    {
+        CategorizationRule::factory()->for($this->user)->create([
+            'merchant_contains' => 'heb',
+            'target_bucket' => Bucket::Need,
+            'target_subcategory' => 'groceries',
+            'auto_review' => true,
+        ]);
+
+        $transaction = Transaction::factory()->for($this->user)->unreviewed()->create([
+            'merchant' => 'HEB Market',
+            'transaction_date' => '2026-07-12',
+        ]);
+
+        $this->postJson('/api/smart-review', ['batch_key' => 'retry-after-undo'])
+            ->assertOk()
+            ->assertJsonPath('data.applied_count', 1)
+            ->assertJsonPath('data.applied.0.id', $transaction->id);
+
+        $this->postJson("/api/transactions/{$transaction->id}/undo")
+            ->assertOk()
+            ->assertJsonPath('data.reviewed', false);
+
+        $this->assertDatabaseHas('transactions', [
+            'id' => $transaction->id,
+            'reviewed_at' => null,
+            'idempotency_key' => null,
+        ]);
+
+        $this->postJson('/api/smart-review', ['batch_key' => 'retry-after-undo'])
+            ->assertOk()
+            ->assertJsonPath('data.applied_count', 1)
+            ->assertJsonPath('data.applied.0.id', $transaction->id)
+            ->assertJsonPath('data.skipped_count', 0);
+
+        $this->assertDatabaseHas('transactions', [
+            'id' => $transaction->id,
+            'bucket' => 'need',
+            'idempotency_key' => 'smart-review:'.$this->user->id.':retry-after-undo:'.$transaction->id,
+        ]);
+        $this->assertNotNull($transaction->fresh()->reviewed_at);
+    }
+
     #[TestDox('Suggestion and Smart Review ignore another user’s matching auto-review rules')]
     public function test_foreign_user_rules_do_not_categorize_selected_user_transactions(): void
     {

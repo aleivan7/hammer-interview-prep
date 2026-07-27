@@ -164,4 +164,76 @@ class TransactionReviewServiceTest extends TestCase
         $this->assertSame('groceries', $second->subcategory);
         $this->assertSame(1, ReviewAudit::query()->where('transaction_id', $transaction->id)->where('action', 'review')->count());
     }
+
+    #[TestDox('Idempotency keys are scoped per user so personas can reuse the same key')]
+    public function test_review_idempotency_key_is_scoped_per_user(): void
+    {
+        $userA = User::factory()->average()->create();
+        $userB = User::factory()->reckless()->create();
+        $transactionA = Transaction::factory()->for($userA)->unreviewed()->create();
+        $transactionB = Transaction::factory()->for($userB)->unreviewed()->create();
+
+        $reviewedA = $this->service->review(
+            transaction: $transactionA,
+            bucket: Bucket::Need,
+            subcategory: 'groceries',
+            source: ReviewSource::Manual,
+            confidence: 100,
+            explanation: 'Persona A review',
+            idempotencyKey: 'shared-key',
+        );
+
+        $reviewedB = $this->service->review(
+            transaction: $transactionB,
+            bucket: Bucket::Want,
+            subcategory: 'dining',
+            source: ReviewSource::Manual,
+            confidence: 100,
+            explanation: 'Persona B review',
+            idempotencyKey: 'shared-key',
+        );
+
+        $this->assertSame($transactionA->id, $reviewedA->id);
+        $this->assertSame($transactionB->id, $reviewedB->id);
+        $this->assertSame(Bucket::Need, $reviewedA->bucket);
+        $this->assertSame(Bucket::Want, $reviewedB->bucket);
+        $this->assertSame('shared-key', $reviewedA->idempotency_key);
+        $this->assertSame('shared-key', $reviewedB->idempotency_key);
+        $this->assertSame(1, ReviewAudit::query()->where('transaction_id', $transactionA->id)->where('action', 'review')->count());
+        $this->assertSame(1, ReviewAudit::query()->where('transaction_id', $transactionB->id)->where('action', 'review')->count());
+    }
+
+    #[TestDox('A new unused idempotency key re-reviews an already-reviewed transaction')]
+    public function test_review_with_new_idempotency_key_updates_already_reviewed_transaction(): void
+    {
+        $user = User::factory()->average()->create();
+        $transaction = Transaction::factory()->for($user)->unreviewed()->create([
+            'bucket' => null,
+        ]);
+
+        $this->service->review(
+            transaction: $transaction,
+            bucket: Bucket::Need,
+            subcategory: 'groceries',
+            source: ReviewSource::Manual,
+            confidence: 100,
+            explanation: 'First review',
+            idempotencyKey: 'key-1',
+        );
+
+        $updated = $this->service->review(
+            transaction: $transaction->fresh(),
+            bucket: Bucket::Want,
+            subcategory: 'dining',
+            source: ReviewSource::Manual,
+            confidence: 90,
+            explanation: 'Second review with new key',
+            idempotencyKey: 'key-2',
+        );
+
+        $this->assertSame(Bucket::Want, $updated->bucket);
+        $this->assertSame('dining', $updated->subcategory);
+        $this->assertSame('key-2', $updated->idempotency_key);
+        $this->assertSame(2, ReviewAudit::query()->where('transaction_id', $transaction->id)->where('action', 'review')->count());
+    }
 }
