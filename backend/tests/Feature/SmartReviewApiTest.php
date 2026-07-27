@@ -4,8 +4,11 @@ namespace Tests\Feature;
 
 use App\Enums\Bucket;
 use App\Models\CategorizationRule;
+use App\Models\Category;
+use App\Models\Merchant;
 use App\Models\Transaction;
 use App\Models\User;
+use Database\Seeders\CatalogSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use PHPUnit\Framework\Attributes\TestDox;
 use Tests\TestCase;
@@ -314,6 +317,58 @@ class SmartReviewApiTest extends TestCase
             'id' => $transaction->id,
             'reviewed_at' => null,
             'bucket' => null,
+        ]);
+    }
+
+    #[TestDox('Alias-resolved descriptors match canonical merchant rules and keep suggest-only behavior')]
+    public function test_alias_resolved_merchant_rule_supports_suggest_only(): void
+    {
+        $this->seed(CatalogSeeder::class);
+
+        $unitedWay = Merchant::query()->where('normalized_name', 'united way')->firstOrFail();
+        $charity = Category::query()
+            ->system()
+            ->where('bucket', Bucket::Want)
+            ->where('normalized_name', 'charity')
+            ->firstOrFail();
+
+        CategorizationRule::factory()->for($this->user)->create([
+            'name' => 'Charitable giving',
+            'merchant_contains' => 'united way',
+            'merchant_id' => $unitedWay->id,
+            'category_id' => $charity->id,
+            'target_bucket' => Bucket::Want,
+            'target_subcategory' => 'charity',
+            'priority' => 12,
+            'enabled' => true,
+            'auto_review' => false,
+        ]);
+
+        $transaction = Transaction::factory()->for($this->user)->unreviewed()->create([
+            'merchant' => 'UNITED WAY DONATION',
+            'raw_merchant_descriptor' => 'UNITED WAY DONATION',
+            'transaction_date' => '2026-07-21',
+        ]);
+
+        $this->getJson("/api/transactions/{$transaction->id}/suggestion")
+            ->assertOk()
+            ->assertJsonPath('data.bucket', 'want')
+            ->assertJsonPath('data.subcategory', 'charity')
+            ->assertJsonPath('data.source', 'rule')
+            ->assertJsonPath('data.confidence', 95)
+            ->assertJsonPath('data.auto_review', false);
+
+        $this->postJson('/api/smart-review', ['batch_key' => 'alias-suggest-only'])
+            ->assertOk()
+            ->assertJsonPath('data.applied_count', 0)
+            ->assertJsonPath('data.skipped_count', 1)
+            ->assertJsonPath('data.skipped.0.id', $transaction->id);
+
+        $this->assertDatabaseHas('transactions', [
+            'id' => $transaction->id,
+            'reviewed_at' => null,
+            'bucket' => null,
+            'category_id' => null,
         ]);
     }
 }

@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Enums\Bucket;
 use App\Enums\ReviewSource;
 use App\Enums\TransactionKind;
+use App\Services\MerchantResolver;
 use Database\Factories\TransactionFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -21,10 +22,13 @@ class Transaction extends Model
         'user_id',
         'account_id',
         'merchant',
+        'raw_merchant_descriptor',
+        'merchant_id',
         'amount_cents',
         'kind',
         'bucket',
         'subcategory',
+        'category_id',
         'transaction_date',
         'reviewed_at',
         'review_source',
@@ -39,6 +43,8 @@ class Transaction extends Model
         return [
             'user_id' => 'integer',
             'account_id' => 'integer',
+            'merchant_id' => 'integer',
+            'category_id' => 'integer',
             'amount_cents' => 'integer',
             'kind' => TransactionKind::class,
             'bucket' => Bucket::class,
@@ -49,6 +55,32 @@ class Transaction extends Model
         ];
     }
 
+    protected static function booted(): void
+    {
+        static::saving(function (Transaction $transaction): void {
+            if ($transaction->isDirty('merchant') && ! $transaction->isDirty('raw_merchant_descriptor')) {
+                $transaction->raw_merchant_descriptor = $transaction->merchant;
+            }
+
+            if ($transaction->raw_merchant_descriptor === null && is_string($transaction->merchant)) {
+                $transaction->raw_merchant_descriptor = $transaction->merchant;
+            }
+
+            if ($transaction->isDirty('raw_merchant_descriptor') || $transaction->isDirty('merchant')) {
+                $resolution = app(MerchantResolver::class)->resolve((string) $transaction->raw_merchant_descriptor);
+                $transaction->merchant_id = $resolution?->merchant->id;
+            }
+
+            if ($transaction->isDirty('category_id') && $transaction->category_id !== null) {
+                $category = Category::query()->find($transaction->category_id);
+                if ($category !== null) {
+                    $transaction->bucket = $category->bucket;
+                    $transaction->subcategory = $category->name;
+                }
+            }
+        });
+    }
+
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
@@ -57,6 +89,16 @@ class Transaction extends Model
     public function account(): BelongsTo
     {
         return $this->belongsTo(Account::class);
+    }
+
+    public function canonicalMerchant(): BelongsTo
+    {
+        return $this->belongsTo(Merchant::class, 'merchant_id');
+    }
+
+    public function category(): BelongsTo
+    {
+        return $this->belongsTo(Category::class);
     }
 
     public function reviewAudits(): HasMany

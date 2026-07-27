@@ -88,6 +88,7 @@ final class SmartReviewService
                     confidence: $result->confidence,
                     explanation: $result->explanation,
                     idempotencyKey: $idempotencyKey,
+                    categoryId: $result->categoryId,
                 );
 
                 $appliedIds[$updated->id] = true;

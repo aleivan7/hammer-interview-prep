@@ -9,10 +9,13 @@ use App\Enums\ReviewSource;
 use App\Enums\TransactionKind;
 use App\Models\Account;
 use App\Models\CategorizationRule;
+use App\Models\Category;
 use App\Models\FinancialPlan;
+use App\Models\Merchant;
 use App\Models\PlannedCashFlow;
 use App\Models\Transaction;
 use App\Models\User;
+use App\Support\CatalogNormalizer;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -72,6 +75,7 @@ final class DemoPersonaDataService
         return DB::transaction(function () use ($user, $definition, $asOf) {
             Transaction::query()->where('user_id', $user->id)->delete();
             CategorizationRule::query()->where('user_id', $user->id)->delete();
+            Category::query()->where('user_id', $user->id)->delete();
             Account::query()->where('user_id', $user->id)->delete();
             PlannedCashFlow::query()->where('user_id', $user->id)->delete();
             FinancialPlan::query()->where('user_id', $user->id)->delete();
@@ -153,22 +157,34 @@ final class DemoPersonaDataService
             $accountKey = $rule['account_key'] ?? null;
             unset($rule['account_key']);
 
+            $merchantContains = (string) ($rule['merchant_contains'] ?? '');
+            $targetBucket = $rule['target_bucket'] ?? null;
+            $targetSubcategory = (string) ($rule['target_subcategory'] ?? '');
+
             CategorizationRule::query()->create([
                 'user_id' => $user->id,
                 'account_id' => $accountKey !== null ? $accountsByKey[$accountKey]->id : null,
                 ...$rule,
+                'merchant_id' => $this->merchantIdFor($merchantContains),
+                'category_id' => $targetBucket !== null && $targetSubcategory !== ''
+                    ? $this->systemCategoryIdFor($targetBucket, $targetSubcategory)
+                    : null,
             ]);
         }
 
         foreach ($definition['reviewed'] as $row) {
+            $categoryId = $this->systemCategoryIdFor($row['bucket'], $row['subcategory']);
+
             Transaction::query()->create([
                 'user_id' => $user->id,
                 'account_id' => $accountsByKey[$row['account_key']]->id,
                 'merchant' => $row['merchant'],
+                'raw_merchant_descriptor' => $row['merchant'],
                 'amount_cents' => $row['amount_cents'],
                 'kind' => $row['kind'],
                 'bucket' => $row['bucket'],
                 'subcategory' => $row['subcategory'],
+                'category_id' => $categoryId,
                 'transaction_date' => $asOf->copy()->day(min((int) $row['day'], $asOf->daysInMonth))->toDateString(),
                 'reviewed_at' => $asOf->copy()->subDays(2),
                 'review_source' => ReviewSource::Manual,
@@ -182,14 +198,60 @@ final class DemoPersonaDataService
                 'user_id' => $user->id,
                 'account_id' => $accountsByKey[$row['account_key']]->id,
                 'merchant' => $row['merchant'],
+                'raw_merchant_descriptor' => $row['merchant'],
                 'amount_cents' => $row['amount_cents'],
                 'kind' => $row['kind'],
                 'bucket' => null,
                 'subcategory' => null,
+                'category_id' => null,
                 'transaction_date' => $asOf->copy()->day(min((int) $row['day'], $asOf->daysInMonth))->toDateString(),
                 'reviewed_at' => null,
             ]);
         }
+    }
+
+    private function systemCategoryIdFor(Bucket|string $bucket, string $subcategory): ?int
+    {
+        $bucketValue = $bucket instanceof Bucket ? $bucket->value : $bucket;
+
+        return Category::query()
+            ->system()
+            ->active()
+            ->where('bucket', $bucketValue)
+            ->where('normalized_name', CatalogNormalizer::name($subcategory))
+            ->value('id');
+    }
+
+    private function merchantIdFor(string $merchantContains): ?int
+    {
+        $needle = trim($merchantContains);
+
+        if ($needle === '') {
+            return null;
+        }
+
+        $normalized = CatalogNormalizer::name($needle);
+
+        $exactId = Merchant::query()
+            ->where('normalized_name', $normalized)
+            ->value('id');
+
+        if ($exactId !== null) {
+            return (int) $exactId;
+        }
+
+        $aliasMatchId = Merchant::query()
+            ->whereHas('aliases', function ($query) use ($normalized): void {
+                $query->where('normalized_pattern', CatalogNormalizer::descriptor($normalized))
+                    ->orWhereRaw('lower(pattern) = ?', [$normalized]);
+            })
+            ->value('id');
+
+        if ($aliasMatchId !== null) {
+            return (int) $aliasMatchId;
+        }
+
+        return app(MerchantResolver::class)->resolve($needle)?->merchant->id;
     }
 
     /**

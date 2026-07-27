@@ -66,6 +66,11 @@ class User extends Authenticatable
         return $this->hasMany(CategorizationRule::class);
     }
 
+    public function categories(): HasMany
+    {
+        return $this->hasMany(Category::class);
+    }
+
     public function isDemoPersona(): bool
     {
         return $this->persona_type !== null;

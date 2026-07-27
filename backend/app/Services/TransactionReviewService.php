@@ -25,8 +25,9 @@ final class TransactionReviewService
         ?int $confidence = null,
         ?string $explanation = null,
         ?string $idempotencyKey = null,
+        ?int $categoryId = null,
     ): Transaction {
-        return DB::transaction(function () use ($transaction, $bucket, $subcategory, $source, $confidence, $explanation, $idempotencyKey) {
+        return DB::transaction(function () use ($transaction, $bucket, $subcategory, $source, $confidence, $explanation, $idempotencyKey, $categoryId) {
             $transaction = Transaction::query()->lockForUpdate()->findOrFail($transaction->id);
 
             if ($idempotencyKey !== null) {
@@ -46,6 +47,9 @@ final class TransactionReviewService
             $previous = [
                 'bucket' => $transaction->bucket?->value,
                 'subcategory' => $transaction->subcategory,
+                'category_id' => $transaction->category_id,
+                'raw_merchant_descriptor' => $transaction->raw_merchant_descriptor,
+                'merchant_id' => $transaction->merchant_id,
                 'reviewed_at' => $transaction->reviewed_at?->toISOString(),
                 'review_source' => $transaction->review_source?->value,
                 'confidence' => $transaction->confidence,
@@ -54,6 +58,7 @@ final class TransactionReviewService
             $transaction->update([
                 'bucket' => $bucket,
                 'subcategory' => $subcategory,
+                'category_id' => $categoryId,
                 'reviewed_at' => now(),
                 'review_source' => $source,
                 'confidence' => $confidence,
@@ -92,10 +97,15 @@ final class TransactionReviewService
                 ->first();
 
             $previous = $audit?->previous_state ?? [];
+            $rawDescriptor = $transaction->raw_merchant_descriptor;
+            $merchantId = $transaction->merchant_id;
 
             $transaction->update([
                 'bucket' => $previous['bucket'] ?? null,
                 'subcategory' => $previous['subcategory'] ?? null,
+                'category_id' => $previous['category_id'] ?? null,
+                'raw_merchant_descriptor' => $previous['raw_merchant_descriptor'] ?? $rawDescriptor,
+                'merchant_id' => array_key_exists('merchant_id', $previous) ? $previous['merchant_id'] : $merchantId,
                 'reviewed_at' => null,
                 'review_source' => null,
                 'confidence' => null,
@@ -114,6 +124,7 @@ final class TransactionReviewService
                 'previous_state' => [
                     'bucket' => $audit?->bucket?->value,
                     'subcategory' => $audit?->subcategory,
+                    'category_id' => $previous['category_id'] ?? null,
                 ],
             ]);
 

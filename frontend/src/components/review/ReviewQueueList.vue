@@ -1,14 +1,22 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import type { Bucket } from '../../types/bucket'
+import { BUCKET_LABELS, type Bucket } from '../../types/bucket'
+import type { Category } from '../../types/category'
 import type { Transaction } from '../../types/transaction'
-import { formatSigned, signedAmountCents } from '../../utils/transactions'
 import { formatShortDate } from '../../utils/money'
+import {
+  displayMerchantName,
+  formatSigned,
+  hasDistinctRawDescriptor,
+  rawMerchantDescriptor,
+  signedAmountCents,
+} from '../../utils/transactions'
 import AppIcon from '../ui/AppIcon.vue'
 import MerchantAvatar from '../ui/MerchantAvatar.vue'
 
 const props = defineProps<{
   transactions: Transaction[]
+  categories: Category[]
   monthLabel: string
   selectedIds: number[]
   updating: boolean
@@ -19,7 +27,7 @@ const emit = defineEmits<{
   focus: [id: number]
   categorizeSelected: [bucket: Bucket]
   clear: []
-  categorizeOne: [id: number, bucket: Bucket]
+  categorizeOne: [id: number, payload: { bucket: Bucket; category_id?: number | null }]
 }>()
 
 const search = ref('')
@@ -29,7 +37,16 @@ const filtered = computed(() => {
   if (!query) {
     return props.transactions
   }
-  return props.transactions.filter((tx) => tx.merchant.toLowerCase().includes(query))
+  return props.transactions.filter((tx) => {
+    const haystacks = [
+      displayMerchantName(tx),
+      rawMerchantDescriptor(tx),
+      tx.merchant,
+      tx.detailed_category?.name ?? '',
+      tx.subcategory ?? '',
+    ]
+    return haystacks.some((value) => value.toLowerCase().includes(query))
+  })
 })
 
 const selectedSet = computed(() => new Set(props.selectedIds))
@@ -45,6 +62,17 @@ const allVisibleSelected = computed(
     filtered.value.length > 0 &&
     filtered.value.every((tx) => selectedSet.value.has(tx.id)),
 )
+
+const groupedCategories = computed(() => {
+  const buckets: Bucket[] = ['need', 'want', 'savings']
+  return buckets.map((bucket) => ({
+    bucket,
+    label: BUCKET_LABELS[bucket],
+    categories: props.categories.filter(
+      (category) => category.bucket === bucket && !category.archived_at,
+    ),
+  }))
+})
 
 function toggleAll(): void {
   if (allVisibleSelected.value) {
@@ -77,8 +105,22 @@ function toggleOne(id: number): void {
 function onRowBucket(id: number, event: Event): void {
   const value = (event.target as HTMLSelectElement).value as Bucket | ''
   if (value) {
-    emit('categorizeOne', id, value)
+    emit('categorizeOne', id, { bucket: value })
   }
+}
+
+function onRowCategory(id: number, event: Event): void {
+  const value = (event.target as HTMLSelectElement).value
+  if (!value) {
+    return
+  }
+
+  const category = props.categories.find((item) => item.id === Number(value))
+  if (!category) {
+    return
+  }
+
+  emit('categorizeOne', id, { bucket: category.bucket, category_id: category.id })
 }
 </script>
 
@@ -97,7 +139,12 @@ function onRowBucket(id: number, event: Event): void {
     <label class="search">
       <AppIcon name="search" :size="16" />
       <span class="sr-only">Search queue</span>
-      <input v-model="search" class="field" type="search" placeholder="Search queue…" />
+      <input
+        v-model="search"
+        class="field"
+        type="search"
+        placeholder="Search merchant, descriptor, or category…"
+      />
     </label>
 
     <label class="select-all">
@@ -120,28 +167,56 @@ function onRowBucket(id: number, event: Event): void {
         <button
           type="button"
           class="focus-transaction"
-          :aria-label="`Open ${tx.merchant} in focus mode`"
+          :aria-label="`Open ${displayMerchantName(tx)} in focus mode`"
           :disabled="updating"
           @click="emit('focus', tx.id)"
         >
-          <MerchantAvatar :name="tx.merchant" :size="36" />
+          <MerchantAvatar :name="displayMerchantName(tx)" :size="36" />
           <div>
-            <strong>{{ tx.merchant }}</strong>
+            <strong>{{ displayMerchantName(tx) }}</strong>
+            <span v-if="hasDistinctRawDescriptor(tx)" class="raw">
+              {{ rawMerchantDescriptor(tx) }}
+            </span>
             <span>{{ formatShortDate(tx.transaction_date) }}</span>
           </div>
         </button>
         <span class="amount money">{{ formatSigned(signedAmountCents(tx)) }}</span>
-        <select
-          class="field bucket"
-          :value="tx.bucket ?? ''"
-          :disabled="updating"
-          @change="onRowBucket(tx.id, $event)"
-        >
-          <option value="">—</option>
-          <option value="need">Needs</option>
-          <option value="want">Wants</option>
-          <option value="savings">Savings</option>
-        </select>
+        <div class="assigns">
+          <select
+            class="field bucket"
+            :value="tx.bucket ?? ''"
+            :disabled="updating"
+            aria-label="Assign bucket"
+            @change="onRowBucket(tx.id, $event)"
+          >
+            <option value="">Bucket</option>
+            <option value="need">Needs</option>
+            <option value="want">Wants</option>
+            <option value="savings">Savings</option>
+          </select>
+          <select
+            class="field category"
+            value=""
+            :disabled="updating"
+            aria-label="Assign category"
+            @change="onRowCategory(tx.id, $event)"
+          >
+            <option value="">Category</option>
+            <optgroup
+              v-for="group in groupedCategories"
+              :key="group.bucket"
+              :label="group.label"
+            >
+              <option
+                v-for="category in group.categories"
+                :key="category.id"
+                :value="category.id"
+              >
+                {{ category.name }}
+              </option>
+            </optgroup>
+          </select>
+        </div>
       </li>
     </ul>
 
@@ -221,7 +296,7 @@ function onRowBucket(id: number, event: Event): void {
 
 .row {
   display: grid;
-  grid-template-columns: auto 1fr auto 6.5rem;
+  grid-template-columns: auto 1fr auto minmax(9rem, 11rem);
   gap: var(--space-3);
   align-items: center;
   padding: var(--space-3) 0;
@@ -261,12 +336,23 @@ function onRowBucket(id: number, event: Event): void {
   font-size: 0.72rem;
 }
 
+.focus-transaction .raw {
+  color: var(--text-dim);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
 .amount {
   font-size: 0.8125rem;
   font-weight: 600;
 }
 
-.bucket {
+.assigns {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.bucket,
+.category {
   min-height: 2rem;
   padding: 0.3rem 0.45rem;
   font-size: 0.75rem;
@@ -311,7 +397,7 @@ function onRowBucket(id: number, event: Event): void {
     grid-template-columns: auto minmax(0, 1fr) auto;
   }
 
-  .bucket {
+  .assigns {
     grid-column: 2 / -1;
   }
 }

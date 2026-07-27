@@ -3,13 +3,18 @@
 namespace Tests\Unit;
 
 use App\Enums\Bucket;
+use App\Enums\MatchStrategy;
 use App\Enums\ReviewSource;
 use App\Enums\TransactionKind;
 use App\Models\Account;
 use App\Models\CategorizationRule;
+use App\Models\Category;
+use App\Models\Merchant;
+use App\Models\MerchantAlias;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Services\RulesAndHeuristicsCategorizer;
+use App\Support\CatalogNormalizer;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use PHPUnit\Framework\Attributes\TestDox;
 use Tests\TestCase;
@@ -280,5 +285,108 @@ class RulesAndHeuristicsCategorizerTest extends TestCase
         $this->assertSame(Bucket::Need, $result->bucket);
         $this->assertSame('household', $result->subcategory);
         $this->assertSame($first->id, $result->ruleId);
+    }
+
+    #[TestDox('Canonical merchant rules match via MerchantResolver aliases')]
+    public function test_canonical_merchant_rules_match_via_aliases(): void
+    {
+        $merchant = Merchant::factory()->create([
+            'name' => 'Netflix',
+            'normalized_name' => CatalogNormalizer::name('Netflix'),
+        ]);
+
+        MerchantAlias::factory()->create([
+            'merchant_id' => $merchant->id,
+            'pattern' => 'NETFLIX',
+            'normalized_pattern' => CatalogNormalizer::descriptor('NETFLIX'),
+            'match_strategy' => MatchStrategy::Prefix,
+            'priority' => 20,
+            'enabled' => true,
+        ]);
+
+        $category = Category::factory()->system()->create([
+            'bucket' => Bucket::Want,
+            'name' => 'Entertainment',
+            'normalized_name' => 'entertainment',
+        ]);
+
+        $rule = CategorizationRule::factory()->create([
+            'user_id' => $this->user->id,
+            'name' => 'Netflix entertainment',
+            'merchant_contains' => 'netflix',
+            'merchant_id' => $merchant->id,
+            'category_id' => $category->id,
+            'target_bucket' => Bucket::Want,
+            'target_subcategory' => 'entertainment',
+            'auto_review' => true,
+            'priority' => 1,
+        ]);
+
+        $transaction = Transaction::factory()->unreviewed()->create([
+            'user_id' => $this->user->id,
+            'merchant' => 'NETFLIX.COM 408724',
+            'raw_merchant_descriptor' => 'NETFLIX.COM 408724',
+            'kind' => TransactionKind::Expense,
+        ]);
+
+        $result = $this->categorizer->categorize($transaction);
+
+        $this->assertSame(ReviewSource::Rule, $result->source);
+        $this->assertSame(Bucket::Want, $result->bucket);
+        $this->assertSame('entertainment', $result->subcategory);
+        $this->assertSame($category->id, $result->categoryId);
+        $this->assertSame($rule->id, $result->ruleId);
+        $this->assertTrue($result->isConfident());
+        $this->assertStringContainsString('Netflix', $result->explanation);
+    }
+
+    #[TestDox('Canonical merchant rules run before heuristics')]
+    public function test_canonical_merchant_rules_run_before_heuristics(): void
+    {
+        $merchant = Merchant::factory()->create([
+            'name' => 'Chipotle',
+            'normalized_name' => CatalogNormalizer::name('Chipotle'),
+        ]);
+
+        MerchantAlias::factory()->create([
+            'merchant_id' => $merchant->id,
+            'pattern' => 'CHIPOTLE',
+            'normalized_pattern' => CatalogNormalizer::descriptor('CHIPOTLE'),
+            'match_strategy' => MatchStrategy::Prefix,
+            'priority' => 10,
+            'enabled' => true,
+        ]);
+
+        $category = Category::factory()->system()->create([
+            'bucket' => Bucket::Need,
+            'name' => 'Groceries',
+            'normalized_name' => 'groceries',
+        ]);
+
+        CategorizationRule::factory()->create([
+            'user_id' => $this->user->id,
+            'name' => 'Chipotle as groceries',
+            'merchant_id' => $merchant->id,
+            'category_id' => $category->id,
+            'target_bucket' => Bucket::Need,
+            'target_subcategory' => 'groceries',
+            'auto_review' => true,
+            'priority' => 10,
+        ]);
+
+        $transaction = Transaction::factory()->unreviewed()->create([
+            'user_id' => $this->user->id,
+            'merchant' => 'Chipotle Downtown',
+            'raw_merchant_descriptor' => 'Chipotle Downtown',
+            'kind' => TransactionKind::Expense,
+        ]);
+
+        $result = $this->categorizer->categorize($transaction);
+
+        $this->assertSame(ReviewSource::Rule, $result->source);
+        $this->assertSame(Bucket::Need, $result->bucket);
+        $this->assertSame('groceries', $result->subcategory);
+        $this->assertSame($category->id, $result->categoryId);
+        $this->assertTrue($result->isConfident());
     }
 }

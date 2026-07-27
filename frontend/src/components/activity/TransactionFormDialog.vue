@@ -1,14 +1,17 @@
 <script setup lang="ts">
-import { computed, nextTick, onUnmounted, reactive, useTemplateRef, watch } from 'vue'
+import { computed, nextTick, onUnmounted, reactive, shallowRef, useTemplateRef, watch } from 'vue'
 import type { Account } from '../../types/account'
 import type { Bucket, TransactionKind } from '../../types/bucket'
+import type { Category } from '../../types/category'
 import type { Transaction } from '../../types/transaction'
 import { dollarsInputToCents } from '../../utils/money'
+import CategorySelector from '../rules/CategorySelector.vue'
 import AppIcon from '../ui/AppIcon.vue'
 
 const props = defineProps<{
   open: boolean
   accounts: Account[]
+  categories: Category[]
   transaction: Transaction | null
   saving: boolean
 }>()
@@ -23,14 +26,19 @@ const emit = defineEmits<{
       transaction_date: string
       account_id: number | null
       bucket: Bucket | null
+      category_id: number | null
       subcategory: string | null
       notes: string | null
       reviewed?: boolean
     },
   ]
+  'create-category': [payload: { name: string; bucket: Bucket }]
 }>()
 
 const merchantInput = useTemplateRef<HTMLInputElement>('merchantInput')
+const creatingCategory = shallowRef(false)
+const createBucket = shallowRef<Bucket>('want')
+const createName = shallowRef('')
 
 const form = reactive({
   merchant: '',
@@ -39,12 +47,16 @@ const form = reactive({
   transaction_date: '',
   account_id: '' as string,
   bucket: '' as '' | Bucket,
-  subcategory: '',
+  category_id: null as number | null,
   notes: '',
   reviewed: false,
 })
 
 const title = computed(() => (props.transaction ? 'Edit transaction' : 'New transaction'))
+
+const selectedCategory = computed(
+  () => props.categories.find((category) => category.id === form.category_id) ?? null,
+)
 
 function onKeydown(event: KeyboardEvent): void {
   if (event.key === 'Escape') {
@@ -74,14 +86,17 @@ watch(
       return
     }
 
+    creatingCategory.value = false
+    createName.value = ''
+
     if (transaction) {
-      form.merchant = transaction.merchant
+      form.merchant = transaction.raw_merchant_descriptor || transaction.merchant
       form.amount = transaction.amount
       form.kind = transaction.kind
       form.transaction_date = transaction.transaction_date
       form.account_id = transaction.account_id ? String(transaction.account_id) : ''
       form.bucket = transaction.bucket ?? ''
-      form.subcategory = transaction.subcategory ?? ''
+      form.category_id = transaction.category_id
       form.notes = transaction.notes ?? ''
       form.reviewed = transaction.reviewed
     } else {
@@ -91,7 +106,7 @@ watch(
       form.transaction_date = new Date().toISOString().slice(0, 10)
       form.account_id = ''
       form.bucket = ''
-      form.subcategory = ''
+      form.category_id = null
       form.notes = ''
       form.reviewed = false
     }
@@ -101,10 +116,36 @@ watch(
   },
 )
 
+watch(
+  () => form.category_id,
+  (categoryId) => {
+    const category = props.categories.find((item) => item.id === categoryId)
+    if (category) {
+      form.bucket = category.bucket
+    }
+  },
+)
+
 onUnmounted(() => {
   document.body.style.overflow = ''
   window.removeEventListener('keydown', onKeydown)
 })
+
+function startCreate(bucket: Bucket): void {
+  creatingCategory.value = true
+  createBucket.value = bucket
+  createName.value = ''
+}
+
+function confirmCreate(): void {
+  const name = createName.value.trim()
+  if (!name) {
+    return
+  }
+  emit('create-category', { name, bucket: createBucket.value })
+  creatingCategory.value = false
+  createName.value = ''
+}
 
 function onSubmit(): void {
   const cents = dollarsInputToCents(form.amount)
@@ -120,7 +161,8 @@ function onSubmit(): void {
     transaction_date: form.transaction_date,
     account_id: form.account_id ? Number(form.account_id) : null,
     bucket: form.bucket || null,
-    subcategory: form.subcategory.trim() || null,
+    category_id: form.category_id,
+    subcategory: selectedCategory.value?.name ?? null,
     notes: form.notes.trim() || null,
     reviewed: form.reviewed,
   })
@@ -148,7 +190,7 @@ function onSubmit(): void {
       </header>
 
       <label>
-        Merchant
+        Merchant descriptor
         <input
           ref="merchantInput"
           v-model="form.merchant"
@@ -157,6 +199,12 @@ function onSubmit(): void {
           maxlength="255"
         />
       </label>
+      <p
+        v-if="transaction?.canonical_merchant"
+        class="canonical-hint"
+      >
+        Canonical: {{ transaction.canonical_merchant.name }}
+      </p>
 
       <div class="row">
         <label>
@@ -196,21 +244,49 @@ function onSubmit(): void {
         </label>
       </div>
 
-      <div class="row">
+      <CategorySelector
+        v-model="form.category_id"
+        :categories="categories"
+        :disabled="saving"
+        allow-empty
+        @create-intent="startCreate"
+      />
+
+      <div v-if="creatingCategory" class="inline-create">
+        <label>
+          New category name
+          <input v-model="createName" class="field" maxlength="100" />
+        </label>
         <label>
           Bucket
-          <select v-model="form.bucket" class="field">
-            <option value="">Uncategorized</option>
+          <select v-model="createBucket" class="field">
             <option value="need">Needs</option>
             <option value="want">Wants</option>
             <option value="savings">Savings</option>
           </select>
         </label>
-        <label>
-          Subcategory
-          <input v-model="form.subcategory" class="field" maxlength="100" />
-        </label>
+        <div class="inline-actions">
+          <button type="button" class="btn btn-ghost" @click="creatingCategory = false">
+            Cancel
+          </button>
+          <button type="button" class="btn btn-primary" @click="confirmCreate">
+            Add category
+          </button>
+        </div>
       </div>
+
+      <label>
+        Bucket
+        <select v-model="form.bucket" class="field">
+          <option value="">Uncategorized</option>
+          <option value="need">Needs</option>
+          <option value="want">Wants</option>
+          <option value="savings">Savings</option>
+        </select>
+      </label>
+      <p class="hint">
+        Pick a detailed category when you have one, or keep a quick Needs/Wants/Savings bucket.
+      </p>
 
       <label>
         Notes
@@ -253,11 +329,14 @@ function onSubmit(): void {
   border: 1px solid var(--border);
   background: var(--bg-elevated);
   box-shadow: var(--shadow-modal);
+  max-height: calc(100vh - 2rem);
+  overflow: auto;
 }
 
 header,
 footer,
-.row {
+.row,
+.inline-actions {
   display: flex;
   justify-content: space-between;
   gap: var(--space-3);
@@ -284,6 +363,26 @@ label {
   grid-template-columns: auto 1fr;
   align-items: center;
   color: var(--text);
+}
+
+.canonical-hint,
+.hint {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 0.72rem;
+}
+
+.inline-create {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-soft);
+}
+
+.inline-actions {
+  justify-content: end;
 }
 
 textarea.field {

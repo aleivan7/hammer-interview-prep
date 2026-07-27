@@ -7,6 +7,7 @@ use App\Enums\ReviewSource;
 use App\Http\Requests\StoreTransactionRequest;
 use App\Http\Requests\UpdateTransactionRequest;
 use App\Http\Resources\TransactionResource;
+use App\Models\Category;
 use App\Models\Transaction;
 use App\Services\TransactionReviewService;
 use App\Support\DemoUserContext;
@@ -28,7 +29,7 @@ class TransactionController extends Controller
         $user = $this->demoUser->user();
         $query = Transaction::query()
             ->forUser($user)
-            ->with('account')
+            ->with(['account', 'canonicalMerchant', 'category'])
             ->orderByDesc('transaction_date')
             ->orderByDesc('id');
 
@@ -50,7 +51,12 @@ class TransactionController extends Controller
 
         if ($request->filled('search')) {
             $search = $request->string('search')->toString();
-            $query->where('merchant', 'like', "%{$search}%");
+            $query->where(function ($builder) use ($search): void {
+                $builder->where('merchant', 'like', "%{$search}%")
+                    ->orWhere('raw_merchant_descriptor', 'like', "%{$search}%")
+                    ->orWhereHas('canonicalMerchant', fn ($merchantQuery) => $merchantQuery->where('name', 'like', "%{$search}%"))
+                    ->orWhereHas('category', fn ($categoryQuery) => $categoryQuery->where('name', 'like', "%{$search}%"));
+            });
         }
 
         if ($request->boolean('paginate', true) && ! $request->boolean('unreviewed_only') && $request->query('queue') !== 'review') {
@@ -65,22 +71,33 @@ class TransactionController extends Controller
         $user = $this->demoUser->user();
         $data = $request->validated();
         $reviewed = (bool) ($data['reviewed'] ?? false);
+        $categoryId = $data['category_id'] ?? null;
+        $bucket = $data['bucket'] ?? null;
+        $subcategory = $data['subcategory'] ?? null;
+
+        if ($categoryId !== null) {
+            $category = Category::query()->findOrFail($categoryId);
+            $bucket = $category->bucket->value;
+            $subcategory = $category->name;
+        }
 
         $transaction = Transaction::query()->create([
             'user_id' => $user->id,
             'account_id' => $data['account_id'] ?? null,
             'merchant' => $data['merchant'],
+            'raw_merchant_descriptor' => $data['merchant'],
             'amount_cents' => $data['amount_cents'],
             'kind' => $data['kind'],
-            'bucket' => $data['bucket'] ?? null,
-            'subcategory' => $data['subcategory'] ?? null,
+            'bucket' => $bucket,
+            'subcategory' => $subcategory,
+            'category_id' => $categoryId,
             'transaction_date' => $data['transaction_date'],
             'notes' => $data['notes'] ?? null,
             'reviewed_at' => $reviewed ? now() : null,
             'review_source' => $reviewed ? ReviewSource::Manual : null,
         ]);
 
-        return (new TransactionResource($transaction->load('account')))
+        return (new TransactionResource($transaction->load(['account', 'canonicalMerchant', 'category'])))
             ->response()
             ->setStatusCode(201);
     }
@@ -94,8 +111,18 @@ class TransactionController extends Controller
         $data = $request->validated();
         $attributes = collect($data)->except(['reviewed', 'category'])->all();
 
+        if (array_key_exists('merchant', $attributes) && ! array_key_exists('raw_merchant_descriptor', $attributes)) {
+            $attributes['raw_merchant_descriptor'] = $attributes['merchant'];
+        }
+
+        if (array_key_exists('category_id', $attributes) && $attributes['category_id'] !== null) {
+            $category = Category::query()->findOrFail($attributes['category_id']);
+            $attributes['bucket'] = $category->bucket->value;
+            $attributes['subcategory'] = $category->name;
+        }
+
         if (array_key_exists('reviewed', $data) && $data['reviewed'] === true) {
-            $bucketValue = $data['bucket'] ?? $transaction->bucket?->value;
+            $bucketValue = $attributes['bucket'] ?? $data['bucket'] ?? $transaction->bucket?->value;
 
             if ($bucketValue === null) {
                 throw new UnprocessableEntityHttpException('A bucket is required to mark a transaction reviewed.');
@@ -105,16 +132,17 @@ class TransactionController extends Controller
                 $transaction->fill($attributes);
                 $transaction->save();
             } else {
-                $transaction->fill(collect($attributes)->except(['bucket', 'subcategory'])->all());
+                $transaction->fill(collect($attributes)->except(['bucket', 'subcategory', 'category_id'])->all());
                 $transaction->save();
 
                 $transaction = $this->reviewService->review(
                     transaction: $transaction,
                     bucket: $bucketValue instanceof Bucket ? $bucketValue : Bucket::from($bucketValue),
-                    subcategory: $data['subcategory'] ?? $transaction->subcategory,
+                    subcategory: $attributes['subcategory'] ?? $data['subcategory'] ?? $transaction->subcategory,
                     source: ReviewSource::Manual,
                     confidence: 100,
                     explanation: 'Manually reviewed.',
+                    categoryId: $attributes['category_id'] ?? $transaction->category_id,
                 );
             }
         } elseif (array_key_exists('reviewed', $data) && $data['reviewed'] === false) {
@@ -129,14 +157,16 @@ class TransactionController extends Controller
             $transaction->save();
         }
 
-        return new TransactionResource($transaction->load('account'));
+        return new TransactionResource($transaction->load(['account', 'canonicalMerchant', 'category']));
     }
 
     public function undo(Transaction $transaction): TransactionResource
     {
         $this->ensureOwned($transaction);
 
-        return new TransactionResource($this->reviewService->undo($transaction)->load('account'));
+        return new TransactionResource(
+            $this->reviewService->undo($transaction)->load(['account', 'canonicalMerchant', 'category']),
+        );
     }
 
     public function suggestion(Transaction $transaction): JsonResponse

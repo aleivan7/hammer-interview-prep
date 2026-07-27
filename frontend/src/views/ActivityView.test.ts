@@ -5,6 +5,7 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fetchAccounts } from '../api/accountApi'
+import { fetchCategories } from '../api/categoryApi'
 import {
   createTransaction,
   fetchTransactions,
@@ -15,6 +16,11 @@ import ActivityView from './ActivityView.vue'
 
 vi.mock('../api/accountApi', () => ({
   fetchAccounts: vi.fn(),
+}))
+
+vi.mock('../api/categoryApi', () => ({
+  fetchCategories: vi.fn(),
+  createCategory: vi.fn(),
 }))
 
 vi.mock('../api/transactionApi', () => ({
@@ -28,11 +34,14 @@ const transaction: Transaction = {
   account_id: null,
   account: null,
   merchant: 'Corner Market',
+  raw_merchant_descriptor: 'Corner Market',
+  merchant_id: null,
   amount_cents: 1250,
   amount: '12.50',
   kind: 'expense',
   bucket: 'want',
   subcategory: null,
+  category_id: null,
   category: 'want',
   transaction_date: '2026-07-22',
   reviewed: false,
@@ -44,6 +53,7 @@ const transaction: Transaction = {
 
 beforeEach(() => {
   vi.mocked(fetchAccounts).mockResolvedValue([])
+  vi.mocked(fetchCategories).mockResolvedValue([])
   vi.mocked(fetchTransactions).mockResolvedValue([transaction])
   vi.mocked(updateTransaction).mockResolvedValue({
     ...transaction,
@@ -80,6 +90,7 @@ describe('ActivityView', () => {
       transaction.id,
       expect.objectContaining({
         bucket: null,
+        category_id: null,
         reviewed: false,
       }),
     )

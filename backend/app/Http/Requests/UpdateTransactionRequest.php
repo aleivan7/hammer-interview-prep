@@ -51,11 +51,23 @@ class UpdateTransactionRequest extends FormRequest
             'amount_cents' => ['sometimes', 'integer', 'min:0', 'max:100000000'],
             'kind' => ['sometimes', Rule::enum(TransactionKind::class)],
             'bucket' => [
-                Rule::requiredIf(fn () => $this->requiresReviewBucket() && ! $this->filled('category')),
+                Rule::requiredIf(fn () => $this->requiresReviewBucket() && ! $this->filled('category') && ! $this->filled('category_id')),
                 'nullable',
                 Rule::enum(Bucket::class),
             ],
             'subcategory' => ['sometimes', 'nullable', 'string', 'max:100'],
+            'category_id' => [
+                'sometimes',
+                'nullable',
+                'integer',
+                Rule::exists('categories', 'id')->where(function ($query) use ($userId): void {
+                    $query->whereNull('archived_at')
+                        ->where(function ($visible) use ($userId): void {
+                            $visible->whereNull('user_id')
+                                ->orWhere('user_id', $userId);
+                        });
+                }),
+            ],
             'transaction_date' => ['sometimes', 'date'],
             'account_id' => [
                 'sometimes',
@@ -66,7 +78,7 @@ class UpdateTransactionRequest extends FormRequest
             'notes' => ['sometimes', 'nullable', 'string', 'max:1000'],
             'reviewed' => ['sometimes', 'boolean'],
             'category' => [
-                Rule::requiredIf(fn () => $this->requiresReviewBucket() && ! $this->filled('bucket')),
+                Rule::requiredIf(fn () => $this->requiresReviewBucket() && ! $this->filled('bucket') && ! $this->filled('category_id')),
                 Rule::in([...Bucket::values(), 'debt_savings']),
             ],
         ];
@@ -83,11 +95,11 @@ class UpdateTransactionRequest extends FormRequest
             return false;
         }
 
-        if ($this->filled('bucket') || $this->filled('category')) {
+        if ($this->filled('bucket') || $this->filled('category') || $this->filled('category_id')) {
             return false;
         }
 
-        if ($this->exists('bucket') || $this->exists('category')) {
+        if ($this->exists('bucket') || $this->exists('category') || $this->exists('category_id')) {
             return true;
         }
 

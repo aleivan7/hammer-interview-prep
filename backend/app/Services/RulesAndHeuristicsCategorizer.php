@@ -12,6 +12,10 @@ use App\Support\CategorizationResult;
 
 final class RulesAndHeuristicsCategorizer implements TransactionCategorizer
 {
+    public function __construct(
+        private readonly MerchantResolver $merchantResolver,
+    ) {}
+
     public function categorize(Transaction $transaction): CategorizationResult
     {
         $ruleMatch = $this->matchRule($transaction);
@@ -25,15 +29,18 @@ final class RulesAndHeuristicsCategorizer implements TransactionCategorizer
 
     private function matchRule(Transaction $transaction): ?CategorizationResult
     {
+        $resolvedMerchantId = $this->resolvedMerchantId($transaction);
+
         $rules = CategorizationRule::query()
             ->where('user_id', $transaction->user_id)
             ->where('enabled', true)
+            ->with(['category', 'merchant'])
             ->orderBy('priority')
             ->orderBy('id')
             ->get();
 
         foreach ($rules as $rule) {
-            if (! str_contains(mb_strtolower($transaction->merchant), mb_strtolower($rule->merchant_contains))) {
+            if (! $this->merchantMatches($rule, $transaction, $resolvedMerchantId)) {
                 continue;
             }
 
@@ -49,18 +56,60 @@ final class RulesAndHeuristicsCategorizer implements TransactionCategorizer
                 continue;
             }
 
+            $bucket = $rule->category?->bucket ?? $rule->target_bucket;
+            $subcategory = $rule->category?->normalized_name ?? $rule->target_subcategory;
+            $merchantLabel = $rule->merchant?->name ?? $rule->merchant_contains;
+
             return new CategorizationResult(
-                bucket: $rule->target_bucket,
-                subcategory: $rule->target_subcategory,
+                bucket: $bucket,
+                subcategory: $subcategory,
                 confidence: 95,
                 source: ReviewSource::Rule,
-                explanation: "Matched rule \"{$rule->name}\" (merchant contains \"{$rule->merchant_contains}\").",
+                explanation: $rule->merchant_id !== null
+                    ? "Matched rule \"{$rule->name}\" for merchant \"{$merchantLabel}\"."
+                    : "Matched rule \"{$rule->name}\" (merchant contains \"{$rule->merchant_contains}\").",
                 autoReview: $rule->auto_review,
                 ruleId: $rule->id,
+                categoryId: $rule->category_id,
             );
         }
 
         return null;
+    }
+
+    private function resolvedMerchantId(Transaction $transaction): ?int
+    {
+        if ($transaction->merchant_id !== null) {
+            return (int) $transaction->merchant_id;
+        }
+
+        $descriptor = $transaction->raw_merchant_descriptor ?: $transaction->merchant;
+
+        if (! is_string($descriptor) || trim($descriptor) === '') {
+            return null;
+        }
+
+        return $this->merchantResolver->resolve($descriptor)?->merchant->id;
+    }
+
+    private function merchantMatches(
+        CategorizationRule $rule,
+        Transaction $transaction,
+        ?int $resolvedMerchantId,
+    ): bool {
+        if ($rule->merchant_id !== null) {
+            return $resolvedMerchantId !== null
+                && (int) $resolvedMerchantId === (int) $rule->merchant_id;
+        }
+
+        if ($rule->merchant_contains === null || $rule->merchant_contains === '') {
+            return false;
+        }
+
+        return str_contains(
+            mb_strtolower((string) $transaction->merchant),
+            mb_strtolower($rule->merchant_contains),
+        );
     }
 
     private function matchHeuristic(Transaction $transaction): CategorizationResult

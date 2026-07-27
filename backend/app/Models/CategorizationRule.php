@@ -18,11 +18,13 @@ class CategorizationRule extends Model
         'user_id',
         'name',
         'merchant_contains',
+        'merchant_id',
         'account_id',
         'amount_cents_min',
         'amount_cents_max',
         'target_bucket',
         'target_subcategory',
+        'category_id',
         'priority',
         'enabled',
         'auto_review',
@@ -32,9 +34,11 @@ class CategorizationRule extends Model
     {
         return [
             'user_id' => 'integer',
+            'merchant_id' => 'integer',
             'account_id' => 'integer',
             'amount_cents_min' => 'integer',
             'amount_cents_max' => 'integer',
+            'category_id' => 'integer',
             'target_bucket' => Bucket::class,
             'priority' => 'integer',
             'enabled' => 'boolean',
@@ -50,6 +54,16 @@ class CategorizationRule extends Model
     public function account(): BelongsTo
     {
         return $this->belongsTo(Account::class);
+    }
+
+    public function merchant(): BelongsTo
+    {
+        return $this->belongsTo(Merchant::class);
+    }
+
+    public function category(): BelongsTo
+    {
+        return $this->belongsTo(Category::class);
     }
 
     public function scopeForUser(Builder $query, User $user): Builder

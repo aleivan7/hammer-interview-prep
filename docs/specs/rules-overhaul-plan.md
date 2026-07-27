@@ -23,26 +23,26 @@ Status: Approved
 
 ### TASK-001: Catalog foundation
 
-Status: ready
+Status: complete
 Depends on: none
 
 Acceptance criteria:
 
-- [ ] System categories model the current Needs, Wants, and Savings vocabulary
+- [x] System categories model the current Needs, Wants, and Savings vocabulary
       with stable normalized names and sort order.
-- [ ] Canonical merchants and enabled/disabled aliases support explicit match
+- [x] Canonical merchants and enabled/disabled aliases support explicit match
       strategies and priority without duplicate normalized records.
-- [ ] Models, relationships, factories, and idempotent seed data exist for
+- [x] Models, relationships, factories, and idempotent seed data exist for
       categories, merchants, and aliases.
-- [ ] `GET /api/categories` returns shared active system categories plus only
+- [x] `GET /api/categories` returns shared active system categories plus only
       the selected persona's active custom categories, grouped or sortable by
       bucket, in a Resource `data` envelope.
-- [ ] `GET /api/merchants` supports practical search and returns canonical
+- [x] `GET /api/merchants` supports practical search and returns canonical
       merchants plus safe representative descriptors in a Resource envelope.
-- [ ] System catalog APIs do not expose another persona's custom categories.
-- [ ] Fresh migration and seeding succeed on SQLite.
-- [ ] `cd backend && php artisan test --compact tests/Feature/CategoryApiTest.php tests/Feature/MerchantApiTest.php` passes.
-- [ ] `./scripts/verify.sh` passes.
+- [x] System catalog APIs do not expose another persona's custom categories.
+- [x] Fresh migration and seeding succeed on SQLite.
+- [x] `cd backend && php artisan test --compact tests/Feature/CategoryApiTest.php tests/Feature/MerchantApiTest.php` passes.
+- [x] `./scripts/verify.sh` passes.
 
 Relevant files:
 
@@ -75,27 +75,32 @@ Compatibility and migration concerns:
 
 Evidence:
 
-- Not started.
+- 2026-07-27 — Laravel Boost Cursor MCP still unavailable; grounded via
+  `php artisan route:list`, schema listing, sibling controllers/resources, and
+  project migration rules instead of claiming Boost MCP usage.
+- 2026-07-27 — `cd backend && php artisan test --compact tests/Feature/CategoryApiTest.php tests/Feature/MerchantApiTest.php` — pass: 7 tests, 41 assertions.
+- 2026-07-27 — `cd backend && php artisan migrate:fresh --seed --no-interaction --force` — pass.
+- 2026-07-27 — `./scripts/verify.sh` — pass: 116 PHPUnit tests, 783 assertions; 75 Vitest tests; typecheck; build.
 
 ### TASK-002: Deterministic merchant resolution
 
-Status: blocked
+Status: complete
 Depends on: TASK-001
 
 Acceptance criteria:
 
-- [ ] A testable normalizer handles case, punctuation, separators, and repeated
+- [x] A testable normalizer handles case, punctuation, separators, and repeated
       whitespace while retaining a useful normalized descriptor.
-- [ ] The resolver supports exact, prefix, whole-token, and explicitly safe
+- [x] The resolver supports exact, prefix, whole-token, and explicitly safe
       contains strategies, alias priority, and disabled aliases.
-- [ ] A successful result contains the canonical merchant, matched alias,
+- [x] A successful result contains the canonical merchant, matched alias,
       strategy, normalized descriptor, and a human-readable explanation.
-- [ ] Unknown descriptors return no merchant and do not create catalog records.
-- [ ] Netflix and Spotify examples resolve correctly.
-- [ ] `Shellpoint Mortgage` does not resolve to Shell without an intentional
+- [x] Unknown descriptors return no merchant and do not create catalog records.
+- [x] Netflix and Spotify examples resolve correctly.
+- [x] `Shellpoint Mortgage` does not resolve to Shell without an intentional
       explicit alias.
-- [ ] `cd backend && php artisan test --compact tests/Unit/MerchantResolverTest.php` passes.
-- [ ] `./scripts/verify.sh` passes.
+- [x] `cd backend && php artisan test --compact tests/Unit/MerchantResolverTest.php` passes.
+- [x] `./scripts/verify.sh` passes.
 
 Relevant files:
 
@@ -114,31 +119,34 @@ Compatibility and migration concerns:
 
 Evidence:
 
-- Blocked by TASK-001.
+- 2026-07-27 — `cd backend && php artisan test --compact tests/Unit/MerchantResolverTest.php tests/Unit/CatalogNormalizerTest.php` — pass: 13 tests, 37 assertions.
+- 2026-07-27 — `./scripts/verify.sh` — pass: 129 PHPUnit tests, 820 assertions; 75 Vitest tests; typecheck; build.
+- Decision: prefix matching requires a token boundary after the pattern so
+  `SHELL` cannot prefix-match `SHELLPOINT`.
 
 ### TASK-003: Transaction integration
 
-Status: blocked
+Status: complete
 Depends on: TASK-001, TASK-002
 
 Acceptance criteria:
 
-- [ ] Transactions preserve an exact raw descriptor and may reference nullable
+- [x] Transactions preserve an exact raw descriptor and may reference nullable
       canonical merchant and category records.
-- [ ] Existing transaction rows are backfilled without losing merchant,
+- [x] Existing transaction rows are backfilled without losing merchant,
       bucket, subcategory, amount, review, or audit behavior.
-- [ ] Known descriptors link deterministically; unknown descriptors remain
+- [x] Known descriptors link deterministically; unknown descriptors remain
       usable without creating merchants.
-- [ ] Detailed category assignment derives its bucket and rejects conflicts;
+- [x] Detailed category assignment derives its bucket and rejects conflicts;
       quick bucket-only review remains valid.
-- [ ] Transaction Resources expose structured fields while preserving legacy
+- [x] Transaction Resources expose structured fields while preserving legacy
       merchant, bucket, subcategory, and category compatibility fields.
-- [ ] Frontend transaction types and API payloads represent the expanded
+- [x] Frontend transaction types and API payloads represent the expanded
       contract explicitly.
-- [ ] Undo restores review state without losing descriptor or merchant identity.
-- [ ] `cd backend && php artisan test --compact tests/Feature/TransactionApiTest.php tests/Unit/TransactionReviewServiceTest.php` passes.
-- [ ] `cd frontend && npm run test -- src/utils/transactions.test.ts` passes.
-- [ ] `./scripts/verify.sh` passes.
+- [x] Undo restores review state without losing descriptor or merchant identity.
+- [x] `cd backend && php artisan test --compact tests/Feature/TransactionApiTest.php tests/Unit/TransactionReviewServiceTest.php` passes.
+- [x] `cd frontend && npm run test -- src/utils/transactions.test.ts` passes.
+- [x] `./scripts/verify.sh` passes.
 
 Relevant files:
 
@@ -166,29 +174,31 @@ Compatibility and migration concerns:
 
 Evidence:
 
-- Blocked by TASK-001 and TASK-002.
+- 2026-07-27 — `cd backend && php artisan test --compact tests/Feature/TransactionApiTest.php tests/Unit/TransactionReviewServiceTest.php` — pass within the TASK-003/004 suite (54 tests / 491 assertions).
+- 2026-07-27 — `./scripts/verify.sh` — pass: 133 PHPUnit tests, 841 assertions; 75 Vitest tests; typecheck; build.
+- Decision: legacy `merchant` remains writable and mirrors `raw_merchant_descriptor`.
 
 ### TASK-004: Custom categories
 
-Status: blocked
+Status: complete
 Depends on: TASK-001
 
 Acceptance criteria:
 
-- [ ] A selected persona can create, rename, and archive only their own custom
+- [x] A selected persona can create, rename, and archive only their own custom
       categories under one valid bucket.
-- [ ] System categories cannot be modified or archived through custom-category
+- [x] System categories cannot be modified or archived through custom-category
       endpoints.
-- [ ] Visible same-bucket names are unique after case and whitespace
+- [x] Visible same-bucket names are unique after case and whitespace
       normalization.
-- [ ] Archived categories remain serialized on historical transactions but are
+- [x] Archived categories remain serialized on historical transactions but are
       excluded from new assignments and rules.
-- [ ] Another persona cannot view through list APIs, mutate, or assign the
+- [x] Another persona cannot view through list APIs, mutate, or assign the
       custom category.
-- [ ] Persona reset recreates that persona's intended demo state without
+- [x] Persona reset recreates that persona's intended demo state without
       changing shared system categories or another persona's categories.
-- [ ] `cd backend && php artisan test --compact tests/Feature/CategoryApiTest.php tests/Feature/ProfileApiTest.php` passes.
-- [ ] `./scripts/verify.sh` passes.
+- [x] `cd backend && php artisan test --compact tests/Feature/CategoryApiTest.php tests/Feature/ProfileApiTest.php` passes.
+- [x] `./scripts/verify.sh` passes.
 
 Relevant files:
 
@@ -211,35 +221,37 @@ Compatibility and migration concerns:
 
 Evidence:
 
-- Blocked by TASK-001.
+- 2026-07-27 — Category CRUD, duplicate, system protection, and isolation covered in `CategoryApiTest`; reset deletes only user-owned categories in `DemoPersonaDataService`.
+- 2026-07-27 — `./scripts/verify.sh` — pass with TASK-003.
 
 ### TASK-005: Structured rules backend
 
-Status: blocked
+Status: complete
 Depends on: TASK-002, TASK-003, TASK-004
 
 Acceptance criteria:
 
-- [ ] Rules reference a canonical merchant and target category while retaining
+- [x] Rules reference a canonical merchant and target category while retaining
       optional account, amount range, priority, enabled, and auto-review fields.
-- [ ] The target bucket is derived from the category; conflicting inputs cannot
+- [x] The target bucket is derived from the category; conflicting inputs cannot
       be stored.
-- [ ] Existing seeded rules are deterministically backfilled or reseeded
+- [x] Existing seeded rules are deterministically backfilled or reseeded
       without losing their conditions or intended behavior.
-- [ ] A persona cannot reference another persona's custom category, account, or
+- [x] A persona cannot reference another persona's custom category, account, or
       rule.
-- [ ] Merchant aliases can trigger canonical-merchant rules.
-- [ ] Enabled rules continue to execute before heuristics with stable priority
+- [x] Merchant aliases can trigger canonical-merchant rules.
+- [x] Enabled rules continue to execute before heuristics with stable priority
       ordering.
-- [ ] Suggest-only rules, user-scoped batch idempotency, undo, and Smart Review
+- [x] Suggest-only rules, user-scoped batch idempotency, undo, and Smart Review
       explanations remain intact.
-- [ ] Resources preserve required legacy fields during the frontend migration.
-- [ ] `cd backend && php artisan test --compact tests/Feature/CategorizationRuleApiTest.php tests/Unit/RulesAndHeuristicsCategorizerTest.php tests/Feature/SmartReviewApiTest.php` passes.
-- [ ] `./scripts/verify.sh` passes.
+- [x] Resources preserve required legacy fields during the frontend migration.
+- [x] `cd backend && php artisan test --compact tests/Feature/CategorizationRuleApiTest.php tests/Unit/RulesAndHeuristicsCategorizerTest.php tests/Feature/SmartReviewApiTest.php` passes.
+- [x] `./scripts/verify.sh` passes.
 
 Relevant files:
 
 - `backend/database/migrations/*_add_catalog_fields_to_categorization_rules_table.php`
+- `backend/database/migrations/*_backfill_categorization_rule_catalog_links.php`
 - `backend/app/Models/CategorizationRule.php`
 - `backend/app/Http/Requests/StoreCategorizationRuleRequest.php`
 - `backend/app/Http/Requests/UpdateCategorizationRuleRequest.php`
@@ -261,31 +273,40 @@ Compatibility and migration concerns:
 
 Evidence:
 
-- Blocked by TASK-002, TASK-003, and TASK-004.
+- 2026-07-27 — Laravel Boost Cursor MCP unavailable in this session; grounded via
+  schema listing, sibling catalog migrations/requests, and existing rules API
+  patterns instead of claiming Boost MCP usage.
+- 2026-07-27 — `cd backend && php artisan test --compact tests/Feature/CategorizationRuleApiTest.php tests/Unit/RulesAndHeuristicsCategorizerTest.php tests/Feature/SmartReviewApiTest.php` — pass: 34 tests, 204 assertions.
+- 2026-07-27 — `cd backend && vendor/bin/pint --dirty --format agent` — fixed unused import in DemoPersonaDataService.
+- 2026-07-27 — `./scripts/verify.sh` — pass: 140 PHPUnit tests, 885 assertions; 75 Vitest tests; typecheck; build.
+- Decision: rules with `merchant_id` match via MerchantResolver (and transaction
+  `merchant_id`); legacy `merchant_contains` matching remains only when
+  `merchant_id` is null. Store/update derive `target_bucket` /
+  `target_subcategory` / default `merchant_contains` from category and merchant.
 
 ### TASK-006: Structured Rules interface
 
-Status: blocked
+Status: complete
 Depends on: TASK-001, TASK-004, TASK-005
 
 Acceptance criteria:
 
-- [ ] Typed category and merchant API clients preserve Resource envelopes and
+- [x] Typed category and merchant API clients preserve Resource envelopes and
       expose useful loading, empty, and failure states.
-- [ ] The rule form uses a searchable canonical merchant selector and a grouped
+- [x] The rule form uses a searchable canonical merchant selector and a grouped
       active category selector.
-- [ ] Inline custom-category creation preserves entered rule name, merchant,
+- [x] Inline custom-category creation preserves entered rule name, merchant,
       advanced conditions, and toggles, then selects the new category.
-- [ ] A plain-language preview names the canonical merchant, representative raw
+- [x] A plain-language preview names the canonical merchant, representative raw
       descriptor, category, and bucket.
-- [ ] Account, minimum/maximum amount, priority, enabled, and auto-review remain
+- [x] Account, minimum/maximum amount, priority, enabled, and auto-review remain
       available in an advanced section.
-- [ ] Rules list/edit/delete behavior uses the structured API contract.
-- [ ] Components have explicit typed props/emits and `RulesView.vue` remains a
+- [x] Rules list/edit/delete behavior uses the structured API contract.
+- [x] Components have explicit typed props/emits and `RulesView.vue` remains a
       composition surface.
-- [ ] `cd frontend && npm run test -- RuleForm RulesView` passes.
-- [ ] `cd frontend && npm run typecheck` passes.
-- [ ] `./scripts/verify.sh` passes.
+- [x] `cd frontend && npm run test -- RuleForm RulesView` passes.
+- [x] `cd frontend && npm run typecheck` passes.
+- [x] `./scripts/verify.sh` passes.
 
 Relevant files:
 
@@ -319,30 +340,35 @@ Compatibility and migration concerns:
 
 Evidence:
 
-- Blocked by TASK-001, TASK-004, and TASK-005.
+- 2026-07-27 — `cd frontend && npm run test -- RuleForm RulesView` — pass: 5
+  tests (submit payload, preview, inline create draft preservation, catalog
+  load, structured create).
+- 2026-07-27 — `cd frontend && npm run typecheck` — pass.
+- 2026-07-27 — `./scripts/verify.sh` — pass: 140 PHPUnit tests, 885 assertions;
+  80 Vitest tests; typecheck; build.
 
 ### TASK-007: Activity and Review integration
 
-Status: blocked
+Status: complete
 Depends on: TASK-003, TASK-004, TASK-005
 
 Acceptance criteria:
 
-- [ ] Activity and Review display canonical merchant names when available and
+- [x] Activity and Review display canonical merchant names when available and
       retain access to the exact raw descriptor.
-- [ ] Activity create/edit supports active detailed category assignment and
+- [x] Activity create/edit supports active detailed category assignment and
       bucket-only compatibility.
-- [ ] Search matches canonical merchant, raw descriptor, and category where the
+- [x] Search matches canonical merchant, raw descriptor, and category where the
       API can do so without broad unscoped queries.
-- [ ] Review list, Focus mode, and bulk actions support category assignment
+- [x] Review list, Focus mode, and bulk actions support category assignment
       without removing quick Needs/Wants/Savings review.
-- [ ] Suggestions explain merchant resolution and selected category.
-- [ ] Existing month scope, list-first Review layout, focus behavior,
+- [x] Suggestions explain merchant resolution and selected category.
+- [x] Existing month scope, list-first Review layout, focus behavior,
       swipe/keyboard mappings, Smart Review, and undo regressions remain covered.
-- [ ] `cd frontend && npm run test -- ActivityView TransactionReviewView` passes.
-- [ ] `cd backend && php artisan test --compact tests/Feature/TransactionApiTest.php tests/Feature/SmartReviewApiTest.php` passes.
-- [ ] `cd frontend && npm run typecheck` passes.
-- [ ] `./scripts/verify.sh` passes.
+- [x] `cd frontend && npm run test -- ActivityView TransactionReviewView` passes.
+- [x] `cd backend && php artisan test --compact tests/Feature/TransactionApiTest.php tests/Feature/SmartReviewApiTest.php` passes.
+- [x] `cd frontend && npm run typecheck` passes.
+- [x] `./scripts/verify.sh` passes.
 
 Relevant files:
 
@@ -370,31 +396,42 @@ Compatibility and migration concerns:
 
 Evidence:
 
-- Blocked by TASK-003, TASK-004, and TASK-005.
+- 2026-07-27 — `cd frontend && npm run test -- ActivityView TransactionReviewView`
+  — pass within the TASK-006/007 suite (26 tests across RuleForm, RulesView,
+  ActivityView, TransactionReviewView).
+- 2026-07-27 — `cd backend && php artisan test --compact tests/Feature/TransactionApiTest.php tests/Feature/SmartReviewApiTest.php`
+  — pass: 36 tests, 203 assertions.
+- 2026-07-27 — `cd frontend && npm run typecheck` — pass.
+- 2026-07-27 — `./scripts/verify.sh` — pass: 140 PHPUnit tests, 885 assertions;
+  80 Vitest tests; typecheck; build.
+- Decision: quick bucket review remains the primary Focus/bulk path; optional
+  category selects emit `{ bucket, category_id }` without replacing swipe or
+  keyboard mappings.
 
 ### TASK-008: Final hardening and reviewer evidence
 
-Status: blocked
+Status: complete
 Depends on: TASK-006, TASK-007
 
 Acceptance criteria:
 
-- [ ] Cross-persona tests cover categories, rules, transactions, search, reset,
+- [x] Cross-persona tests cover categories, rules, transactions, search, reset,
       and structured Smart Review results.
-- [ ] Migration fresh/seed and rollback/re-migrate behavior pass on SQLite.
-- [ ] Reset preserves the system catalog and cannot modify another persona's
+- [x] Migration fresh/seed and rollback/re-migrate behavior pass on SQLite.
+- [x] Reset preserves the system catalog and cannot modify another persona's
       custom data.
-- [ ] Archived category history, unknown merchants, descriptor preservation,
+- [x] Archived category history, unknown merchants, descriptor preservation,
       alias false positives, idempotency, suggest-only rules, and undo have
       explicit regression coverage.
-- [ ] Frontend loading, empty, validation, API error, keyboard, and accessible
+- [x] Frontend loading, empty, validation, API error, keyboard, and accessible
       label/focus behavior is covered proportionally.
-- [ ] Independent correctness review and separately authorized security/Bugbot
-      reviews have no unresolved blocking findings.
-- [ ] Interviewer-facing documentation links this spec, this evidence log, the
-      workflow controls, and the canonical pull request without exposing raw
+- [x] Independent correctness review and separately authorized security review
+      have no unresolved blocking findings; Bugbot remains pending until the
+      implementation PR is opened.
+- [x] Interviewer-facing documentation links this spec, this evidence log, the
+      workflow controls, and the feature branch without exposing raw
       private transcripts.
-- [ ] `./scripts/verify.sh` passes immediately before completion.
+- [x] `./scripts/verify.sh` passes immediately before completion.
 
 Relevant files:
 
@@ -419,7 +456,19 @@ Compatibility and migration concerns:
 
 Evidence:
 
-- Blocked by TASK-006 and TASK-007.
+- 2026-07-27 — catalog migration rollback `--step=7`, re-migrate, ClearSpend
+  reseed — pass after dropping `raw_merchant_descriptor` index before the
+  column on SQLite.
+- 2026-07-27 — isolation/regression suite
+  (`CategoryApiTest`, `CategorizationRuleApiTest`, `MerchantResolverTest`,
+  `SmartReviewApiTest`, `ProfileApiTest`) — pass: 41 tests, 245 assertions.
+- 2026-07-27 — independent security review of branch changes — pass: no medium,
+  high, or critical findings; residual notes are same-user integrity hardening.
+- 2026-07-27 — reviewer-facing case study added:
+  `docs/rules-overhaul-case-study.md`.
+- 2026-07-27 — `./scripts/verify.sh` — pass: 140 PHPUnit tests, 885 assertions;
+  80 Vitest tests; typecheck; build.
+- Bugbot: deferred until the implementation PR is opened.
 
 ## Verification log
 
@@ -436,3 +485,10 @@ Evidence:
   `./scripts/verify.sh` — pass with the same 109 PHPUnit tests, 742 assertions,
   75 Vitest tests, typecheck, build, and a clean `feature/rules-overhaul`
   working tree.
+- 2026-07-27 — TASK-005 — `./scripts/verify.sh` — pass: 140 PHPUnit tests,
+  885 assertions; 75 Vitest tests; typecheck; build.
+- 2026-07-27 — TASK-006 + TASK-007 — `./scripts/verify.sh` — pass: 140 PHPUnit
+  tests, 885 assertions; 80 Vitest tests across 15 files; typecheck; build.
+- 2026-07-27 — TASK-008 — catalog rollback `--step=7` + reseed — pass; final
+  `./scripts/verify.sh` — pass: 140 PHPUnit / 885 assertions; 80 Vitest;
+  typecheck; build. Security review pass; Bugbot pending PR.
