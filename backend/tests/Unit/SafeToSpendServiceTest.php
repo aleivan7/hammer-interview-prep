@@ -298,6 +298,34 @@ class SafeToSpendServiceTest extends TestCase
         $this->assertSame(0, $result['bucket_actuals']['savings']);
     }
 
+    #[TestDox('Overspent savings target clamps remaining savings at zero so STS is not inflated')]
+    public function test_remaining_savings_target_clamps_at_zero_when_overspent(): void
+    {
+        $user = User::factory()->average()->create();
+
+        FinancialPlan::factory()->for($user)->create([
+            'monthly_income_cents' => 100_000,
+            'savings_percent' => 20,
+            'safety_buffer_cents' => 0,
+        ]);
+        Account::factory()->for($user)->create(['balance_cents' => 50_000]);
+
+        Transaction::factory()->for($user)->reviewed()->create([
+            'kind' => TransactionKind::Expense,
+            'bucket' => Bucket::Savings,
+            'amount_cents' => 30_000,
+            'transaction_date' => '2026-07-10',
+        ]);
+
+        $result = app(SafeToSpendService::class)->forUser($user, Carbon::parse('2026-07-15'));
+
+        $this->assertSame(20_000, $result['bucket_targets']['savings']);
+        $this->assertSame(30_000, $result['bucket_actuals']['savings']);
+        $this->assertSame(0, $result['breakdown']['remaining_savings_target_cents']);
+        // 50_000 available - 0 remaining savings target (not -10_000)
+        $this->assertSame(50_000, $result['safe_to_spend_cents']);
+    }
+
     #[TestDox('Surfaces at most three unusual expense alerts at or above 100000 cents')]
     public function test_unusual_alerts_include_large_expenses_capped_at_three(): void
     {
