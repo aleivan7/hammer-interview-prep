@@ -474,6 +474,65 @@ describe('TransactionReviewView', () => {
     expect(wrapper.text()).toContain('HEB')
   })
 
+  it('select-all visible only batches filtered matches after search changes', async () => {
+    const hiddenMatch: Transaction = {
+      ...secondTransaction,
+      id: 4,
+      merchant: 'Whole Foods',
+      amount_cents: 3200,
+      amount: '32.00',
+    }
+
+    vi.mocked(fetchReviewQueue).mockResolvedValue([
+      firstTransaction,
+      secondTransaction,
+      hiddenMatch,
+    ])
+    vi.mocked(updateTransaction).mockImplementation(async (id) => {
+      const source =
+        id === firstTransaction.id
+          ? firstTransaction
+          : id === secondTransaction.id
+            ? secondTransaction
+            : hiddenMatch
+
+      return { ...source, bucket: 'want', reviewed: true }
+    })
+
+    const wrapper = mount(TransactionReviewView)
+    await flushPromises()
+
+    await wrapper.get('input[type="search"]').setValue('Shell')
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.text()).toContain('Shell Gas')
+    expect(wrapper.text()).not.toContain('HEB')
+    expect(wrapper.text()).not.toContain('Whole Foods')
+
+    await wrapper.get('label.select-all input[type="checkbox"]').setValue(true)
+    expect(wrapper.text()).toContain('1 selected')
+
+    await wrapper.get('input[type="search"]').setValue('')
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.text()).toContain('HEB')
+    expect(wrapper.text()).toContain('Whole Foods')
+    expect(wrapper.text()).toContain('1 selected')
+
+    await buttonContaining(wrapper, 'Wants').trigger('click')
+    await flushPromises()
+
+    expect(updateTransaction).toHaveBeenCalledTimes(1)
+    expect(updateTransaction).toHaveBeenCalledWith(2, {
+      bucket: 'want',
+      reviewed: true,
+    })
+    expect(wrapper.text()).toContain('Categorized 1')
+    expect(wrapper.text()).toContain('HEB')
+    expect(wrapper.text()).toContain('Whole Foods')
+    expect(wrapper.text()).not.toContain('Shell Gas')
+  })
+
   it('categorizes one transaction from its row', async () => {
     vi.mocked(fetchReviewQueue).mockResolvedValue([firstTransaction])
     vi.mocked(updateTransaction).mockResolvedValue({
