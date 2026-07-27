@@ -4,8 +4,10 @@ namespace Tests\Feature;
 
 use App\Enums\Bucket;
 use App\Models\Account;
+use App\Models\Category;
 use App\Models\Transaction;
 use App\Models\User;
+use Database\Seeders\CatalogSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use PHPUnit\Framework\Attributes\TestDox;
 use Tests\TestCase;
@@ -306,6 +308,70 @@ class TransactionApiTest extends TestCase
             'id' => $transaction->id,
             'merchant' => 'Updated Merchant',
             'bucket' => 'want',
+        ]);
+    }
+
+    #[TestDox('Bucket-only review clears an incompatible detailed category')]
+    public function test_bucket_only_review_clears_existing_category_and_subcategory(): void
+    {
+        $this->seed(CatalogSeeder::class);
+        $dining = Category::query()
+            ->whereNull('user_id')
+            ->where('bucket', Bucket::Want)
+            ->where('normalized_name', 'dining')
+            ->firstOrFail();
+        $transaction = Transaction::factory()->for($this->user)->unreviewed()->create([
+            'bucket' => Bucket::Want,
+            'subcategory' => 'Dining',
+            'category_id' => $dining->id,
+        ]);
+
+        $this->patchJson("/api/transactions/{$transaction->id}", [
+            'bucket' => 'need',
+            'reviewed' => true,
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.bucket', 'need')
+            ->assertJsonPath('data.category_id', null)
+            ->assertJsonPath('data.detailed_category', null);
+
+        $this->assertDatabaseHas('transactions', [
+            'id' => $transaction->id,
+            'bucket' => 'need',
+            'subcategory' => null,
+            'category_id' => null,
+        ]);
+    }
+
+    #[TestDox('Clearing category_id clears its stale subcategory but preserves the bucket')]
+    public function test_clearing_category_id_clears_stale_subcategory(): void
+    {
+        $this->seed(CatalogSeeder::class);
+        $dining = Category::query()
+            ->whereNull('user_id')
+            ->where('bucket', Bucket::Want)
+            ->where('normalized_name', 'dining')
+            ->firstOrFail();
+        $transaction = Transaction::factory()->for($this->user)->unreviewed()->create([
+            'bucket' => Bucket::Want,
+            'subcategory' => 'Dining',
+            'category_id' => $dining->id,
+        ]);
+
+        $this->patchJson("/api/transactions/{$transaction->id}", [
+            'category_id' => null,
+            'reviewed' => false,
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.bucket', 'want')
+            ->assertJsonPath('data.category_id', null)
+            ->assertJsonPath('data.detailed_category', null);
+
+        $this->assertDatabaseHas('transactions', [
+            'id' => $transaction->id,
+            'bucket' => 'want',
+            'subcategory' => null,
+            'category_id' => null,
         ]);
     }
 

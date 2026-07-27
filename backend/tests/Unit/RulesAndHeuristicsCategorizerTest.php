@@ -3,18 +3,15 @@
 namespace Tests\Unit;
 
 use App\Enums\Bucket;
-use App\Enums\MatchStrategy;
 use App\Enums\ReviewSource;
 use App\Enums\TransactionKind;
 use App\Models\Account;
 use App\Models\CategorizationRule;
 use App\Models\Category;
 use App\Models\Merchant;
-use App\Models\MerchantAlias;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Services\RulesAndHeuristicsCategorizer;
-use App\Support\CatalogNormalizer;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use PHPUnit\Framework\Attributes\TestDox;
 use Tests\TestCase;
@@ -290,25 +287,12 @@ class RulesAndHeuristicsCategorizerTest extends TestCase
     #[TestDox('Canonical merchant rules match via MerchantResolver aliases')]
     public function test_canonical_merchant_rules_match_via_aliases(): void
     {
-        $merchant = Merchant::factory()->create([
-            'name' => 'Netflix',
-            'normalized_name' => CatalogNormalizer::name('Netflix'),
-        ]);
-
-        MerchantAlias::factory()->create([
-            'merchant_id' => $merchant->id,
-            'pattern' => 'NETFLIX',
-            'normalized_pattern' => CatalogNormalizer::descriptor('NETFLIX'),
-            'match_strategy' => MatchStrategy::Prefix,
-            'priority' => 20,
-            'enabled' => true,
-        ]);
-
-        $category = Category::factory()->system()->create([
-            'bucket' => Bucket::Want,
-            'name' => 'Entertainment',
-            'normalized_name' => 'entertainment',
-        ]);
+        $merchant = Merchant::query()->where('normalized_name', 'netflix')->firstOrFail();
+        $category = Category::query()
+            ->whereNull('user_id')
+            ->where('bucket', Bucket::Want)
+            ->where('normalized_name', 'entertainment')
+            ->firstOrFail();
 
         $rule = CategorizationRule::factory()->create([
             'user_id' => $this->user->id,
@@ -343,25 +327,12 @@ class RulesAndHeuristicsCategorizerTest extends TestCase
     #[TestDox('Canonical merchant rules run before heuristics')]
     public function test_canonical_merchant_rules_run_before_heuristics(): void
     {
-        $merchant = Merchant::factory()->create([
-            'name' => 'Chipotle',
-            'normalized_name' => CatalogNormalizer::name('Chipotle'),
-        ]);
-
-        MerchantAlias::factory()->create([
-            'merchant_id' => $merchant->id,
-            'pattern' => 'CHIPOTLE',
-            'normalized_pattern' => CatalogNormalizer::descriptor('CHIPOTLE'),
-            'match_strategy' => MatchStrategy::Prefix,
-            'priority' => 10,
-            'enabled' => true,
-        ]);
-
-        $category = Category::factory()->system()->create([
-            'bucket' => Bucket::Need,
-            'name' => 'Groceries',
-            'normalized_name' => 'groceries',
-        ]);
+        $merchant = Merchant::query()->where('normalized_name', 'chipotle')->firstOrFail();
+        $category = Category::query()
+            ->whereNull('user_id')
+            ->where('bucket', Bucket::Need)
+            ->where('normalized_name', 'groceries')
+            ->firstOrFail();
 
         CategorizationRule::factory()->create([
             'user_id' => $this->user->id,

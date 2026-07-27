@@ -115,6 +115,11 @@ class TransactionController extends Controller
             $attributes['raw_merchant_descriptor'] = $attributes['merchant'];
         }
 
+        if (array_key_exists('bucket', $attributes) && ! array_key_exists('category_id', $attributes)) {
+            $attributes['category_id'] = null;
+            $attributes['subcategory'] ??= null;
+        }
+
         if (array_key_exists('category_id', $attributes) && $attributes['category_id'] !== null) {
             $category = Category::query()->findOrFail($attributes['category_id']);
             $attributes['bucket'] = $category->bucket->value;
@@ -142,7 +147,9 @@ class TransactionController extends Controller
                     source: ReviewSource::Manual,
                     confidence: 100,
                     explanation: 'Manually reviewed.',
-                    categoryId: $attributes['category_id'] ?? $transaction->category_id,
+                    categoryId: array_key_exists('category_id', $attributes)
+                        ? $attributes['category_id']
+                        : $transaction->category_id,
                 );
             }
         } elseif (array_key_exists('reviewed', $data) && $data['reviewed'] === false) {

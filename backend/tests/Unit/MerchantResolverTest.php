@@ -58,8 +58,13 @@ class MerchantResolverTest extends TestCase
     #[TestDox('Shellpoint Mortgage does not resolve to Shell without an intentional alias')]
     public function test_shellpoint_does_not_resolve_to_shell(): void
     {
-        $this->assertNull($this->resolver->resolve('Shellpoint Mortgage'));
-        $this->assertNull($this->resolver->resolve('SHELLPOINT MORTGAGE'));
+        $mixedCase = $this->resolver->resolve('Shellpoint Mortgage');
+        $uppercase = $this->resolver->resolve('SHELLPOINT MORTGAGE');
+
+        $this->assertNotNull($mixedCase);
+        $this->assertNotNull($uppercase);
+        $this->assertSame('Mortgage Servicing Co', $mixedCase->merchant->name);
+        $this->assertSame('Mortgage Servicing Co', $uppercase->merchant->name);
     }
 
     #[TestDox('Disabled aliases are ignored')]
@@ -126,18 +131,9 @@ class MerchantResolverTest extends TestCase
 
     private function seedCatalogAliases(): void
     {
-        $netflix = Merchant::query()->create([
-            'name' => 'Netflix',
-            'logo_key' => 'netflix',
-        ]);
-        $spotify = Merchant::query()->create([
-            'name' => 'Spotify',
-            'logo_key' => 'spotify',
-        ]);
-        $shell = Merchant::query()->create([
-            'name' => 'Shell',
-            'logo_key' => 'shell',
-        ]);
+        $netflix = Merchant::query()->where('normalized_name', 'netflix')->firstOrFail();
+        $spotify = Merchant::query()->where('normalized_name', 'spotify')->firstOrFail();
+        $shell = Merchant::query()->where('normalized_name', 'shell')->firstOrFail();
 
         foreach ([
             [$netflix, 'NETFLIX', MatchStrategy::Exact, 10],
@@ -153,13 +149,18 @@ class MerchantResolverTest extends TestCase
             [$shell, 'SHELL', MatchStrategy::WholeToken, 30],
             [$shell, 'SHELL', MatchStrategy::SafeContains, 40],
         ] as [$merchant, $pattern, $strategy, $priority]) {
-            MerchantAlias::query()->create([
-                'merchant_id' => $merchant->id,
-                'pattern' => $pattern,
-                'match_strategy' => $strategy,
-                'priority' => $priority,
-                'enabled' => true,
-            ]);
+            MerchantAlias::query()->updateOrCreate(
+                [
+                    'merchant_id' => $merchant->id,
+                    'normalized_pattern' => CatalogNormalizer::descriptor($pattern),
+                    'match_strategy' => $strategy,
+                ],
+                [
+                    'pattern' => $pattern,
+                    'priority' => $priority,
+                    'enabled' => true,
+                ],
+            );
         }
     }
 }

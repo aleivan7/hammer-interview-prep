@@ -71,11 +71,17 @@ class Transaction extends Model
                 $transaction->merchant_id = $resolution?->merchant->id;
             }
 
-            if ($transaction->isDirty('category_id') && $transaction->category_id !== null) {
-                $category = Category::query()->find($transaction->category_id);
-                if ($category !== null) {
-                    $transaction->bucket = $category->bucket;
-                    $transaction->subcategory = $category->name;
+            if ($transaction->isDirty('category_id')) {
+                if ($transaction->category_id === null) {
+                    if (! $transaction->isDirty('subcategory')) {
+                        $transaction->subcategory = null;
+                    }
+                } else {
+                    $category = Category::query()->find($transaction->category_id);
+                    if ($category !== null) {
+                        $transaction->bucket = $category->bucket;
+                        $transaction->subcategory = $category->name;
+                    }
                 }
             }
         });
