@@ -151,6 +151,9 @@ this POC does **not** call a hosted LLM.
 - Feature spec: [`docs/specs/clearspend.md`](docs/specs/clearspend.md)
 - Implementation plan: [`docs/specs/clearspend-plan.md`](docs/specs/clearspend-plan.md)
 - AI delivery workflow: [`docs/ai-workflow.md`](docs/ai-workflow.md)
+- Rules overhaul spec: [`docs/specs/rules-overhaul.md`](docs/specs/rules-overhaul.md)
+- Rules overhaul task plan and evidence:
+  [`docs/specs/rules-overhaul-plan.md`](docs/specs/rules-overhaul-plan.md)
 
 Interactive development: commits, pushes, merges, and deploys require an
 explicit human decision. Repository-approved Cursor Automations may push

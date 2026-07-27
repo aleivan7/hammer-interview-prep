@@ -3,6 +3,20 @@
 This project uses layered guidance, on-demand skills, Laravel Boost, deterministic
 verification, and bounded Ralph iterations. Human review remains the final gate.
 
+## Current reference feature
+
+The Rules overhaul is the repository's end-to-end example of this workflow:
+
+- [`specs/rules-overhaul.md`](specs/rules-overhaul.md) defines user-visible
+  outcomes, edge behavior, constraints, non-goals, and product decisions.
+- [`specs/rules-overhaul-plan.md`](specs/rules-overhaul-plan.md) divides the
+  work into dependency-ordered tasks with narrow checks and an evidence log.
+
+Only one task becomes `ready` at a time. After implementation and verification,
+the task stops for human diff review before its successor is unblocked. This
+keeps the durable plan useful as shared state without treating it as authority
+when code inspection or test evidence proves an assumption wrong.
+
 ## Daily feature workflow
 
 1. Describe the user-visible goal, constraints, non-goals, and acceptance
@@ -69,6 +83,8 @@ version-aware documentation first. Database queries, code execution, and logs
 require human approval.
 
 After changing MCP configuration, reload Cursor if the server does not appear.
+If Boost remains unavailable, record that failure and stop Laravel work that
+requires Boost grounding rather than claiming the context step was completed.
 The server can be smoke-tested without Cursor:
 
 ```bash
