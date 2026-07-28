@@ -19,6 +19,7 @@ import {
   undoTransactionReview,
   updateTransaction,
 } from '../api/transactionApi'
+import { fetchCategories } from '../api/categoryApi'
 import { runSmartReview } from '../api/smartReviewApi'
 import { CARD_EXIT_MS } from '../composables/useCardSwipe'
 import type { Transaction } from '../types/transaction'
@@ -33,6 +34,10 @@ vi.mock('../api/transactionApi', () => ({
   undoTransactionReview: vi.fn(),
 }))
 
+vi.mock('../api/categoryApi', () => ({
+  fetchCategories: vi.fn(),
+}))
+
 vi.mock('../api/smartReviewApi', () => ({
   runSmartReview: vi.fn(),
 }))
@@ -41,11 +46,14 @@ const firstTransaction: Transaction = {
   id: 1,
   account_id: null,
   merchant: 'HEB',
+  raw_merchant_descriptor: 'HEB',
+  merchant_id: null,
   amount_cents: 8423,
   amount: '84.23',
   kind: 'expense',
   bucket: null,
   subcategory: null,
+  category_id: null,
   category: null,
   transaction_date: '2026-07-20',
   reviewed: false,
@@ -59,11 +67,14 @@ const secondTransaction: Transaction = {
   id: 2,
   account_id: null,
   merchant: 'Shell Gas',
+  raw_merchant_descriptor: 'Shell Gas',
+  merchant_id: null,
   amount_cents: 4250,
   amount: '42.50',
   kind: 'expense',
   bucket: null,
   subcategory: null,
+  category_id: null,
   category: null,
   transaction_date: '2026-07-21',
   reviewed: false,
@@ -127,9 +138,12 @@ beforeEach(() => {
   vi.mocked(updateTransaction).mockReset()
   vi.mocked(undoTransactionReview).mockReset()
   vi.mocked(runSmartReview).mockReset()
+  vi.mocked(fetchCategories).mockReset()
+  vi.mocked(fetchCategories).mockResolvedValue([])
   vi.mocked(fetchTransactionSuggestion).mockResolvedValue({
     bucket: 'need',
     subcategory: 'groceries',
+    category_id: null,
     confidence: 86,
     source: 'heuristic',
     explanation: 'Heuristic match for merchant containing "heb".',
@@ -479,6 +493,7 @@ describe('TransactionReviewView', () => {
       ...secondTransaction,
       id: 4,
       merchant: 'Whole Foods',
+      raw_merchant_descriptor: 'Whole Foods',
       amount_cents: 3200,
       amount: '32.00',
     }

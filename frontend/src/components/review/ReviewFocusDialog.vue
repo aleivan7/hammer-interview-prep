@@ -1,14 +1,21 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, shallowRef, useTemplateRef, watch } from 'vue'
 import type { Bucket } from '../../types/bucket'
+import type { Category } from '../../types/category'
 import type { Transaction, TransactionSuggestion } from '../../types/transaction'
 import AppIcon from '../ui/AppIcon.vue'
 import ReviewActions from './ReviewActions.vue'
 import ReviewCard from './ReviewCard.vue'
 
+export type ReviewCategorizePayload = {
+  bucket: Bucket
+  category_id?: number | null
+}
+
 const props = defineProps<{
   transaction: Transaction | null
   suggestion: TransactionSuggestion | null
+  categories: Category[]
   monthLabel: string
   progressLabel: string
   updating: boolean
@@ -18,7 +25,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   close: []
-  categorize: [bucket: Bucket]
+  categorize: [payload: ReviewCategorizePayload]
   undo: []
   skip: []
 }>()
@@ -45,15 +52,15 @@ async function requestCategorize(bucket: Bucket): Promise<void> {
     if (cardRef.value) {
       await cardRef.value.beginExit(bucket)
     } else {
-      emit('categorize', bucket)
+      emit('categorize', { bucket })
     }
   } finally {
     exiting.value = false
   }
 }
 
-function onCardCategorize(bucket: Bucket): void {
-  emit('categorize', bucket)
+function onCardCategorize(payload: ReviewCategorizePayload): void {
+  emit('categorize', payload)
 }
 
 function onKeydown(event: KeyboardEvent): void {
@@ -168,6 +175,7 @@ onUnmounted(() => {
             ref="cardRef"
             :transaction="transaction"
             :suggestion="suggestion"
+            :categories="categories"
             :updating="updating"
             @categorize="onCardCategorize"
             @exit-start="onExitStart"

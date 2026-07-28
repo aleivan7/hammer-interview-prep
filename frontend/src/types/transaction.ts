@@ -8,17 +8,37 @@ export interface TransactionAccountSummary {
   institution_name: string
 }
 
+export interface CanonicalMerchantSummary {
+  id: number
+  name: string
+  normalized_name: string
+  logo_key: string | null
+}
+
+export interface DetailedCategorySummary {
+  id: number
+  name: string
+  bucket: Bucket
+  is_system: boolean
+  archived_at: string | null
+}
+
 export interface Transaction {
   id: number
   account_id: number | null
   account?: TransactionAccountSummary | null
   merchant: string
+  raw_merchant_descriptor: string
+  merchant_id: number | null
+  canonical_merchant?: CanonicalMerchantSummary | null
   amount_cents: number
   /** Decimal amount serialized as a string, e.g. "84.23" */
   amount: string
   kind: TransactionKind
   bucket: Bucket | null
   subcategory: string | null
+  category_id: number | null
+  detailed_category?: DetailedCategorySummary | null
   /** Legacy alias of bucket for transitional clients */
   category: Bucket | null
   transaction_date: string
@@ -35,6 +55,7 @@ export interface UpdateTransactionPayload {
   kind?: TransactionKind
   bucket?: Bucket | null
   category?: Bucket | 'debt_savings'
+  category_id?: number | null
   subcategory?: string | null
   transaction_date?: string
   account_id?: number | null
@@ -49,6 +70,7 @@ export interface StoreTransactionPayload {
   transaction_date: string
   account_id?: number | null
   bucket?: Bucket | null
+  category_id?: number | null
   subcategory?: string | null
   notes?: string | null
   reviewed?: boolean
@@ -57,6 +79,7 @@ export interface StoreTransactionPayload {
 export interface TransactionSuggestion {
   bucket: Bucket | null
   subcategory: string | null
+  category_id: number | null
   confidence: number
   source: string
   explanation: string

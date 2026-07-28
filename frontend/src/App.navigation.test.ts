@@ -141,6 +141,7 @@ beforeEach(() => {
   vi.mocked(fetchTransactionSuggestion).mockResolvedValue({
     bucket: null,
     subcategory: null,
+    category_id: null,
     confidence: 0,
     source: 'heuristic',
     explanation: 'None',
