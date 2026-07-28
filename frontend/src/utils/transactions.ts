@@ -2,6 +2,21 @@ import type { Bucket } from '../types/bucket'
 import type { Transaction } from '../types/transaction'
 import { formatCents } from './money'
 
+/** Prefer canonical merchant when present; fall back to legacy merchant. */
+export function displayMerchantName(tx: Transaction): string {
+  return tx.canonical_merchant?.name ?? tx.merchant
+}
+
+export function rawMerchantDescriptor(tx: Transaction): string {
+  return tx.raw_merchant_descriptor || tx.merchant
+}
+
+export function hasDistinctRawDescriptor(tx: Transaction): boolean {
+  const display = displayMerchantName(tx)
+  const raw = rawMerchantDescriptor(tx)
+  return raw.trim().toLowerCase() !== display.trim().toLowerCase()
+}
+
 export function signedAmountCents(tx: Transaction): number {
   if (tx.kind === 'income' || tx.kind === 'refund') {
     return Math.abs(tx.amount_cents)

@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Contracts\TransactionCategorizer;
 use App\Enums\Bucket;
 use App\Enums\ReviewSource;
+use App\Models\Category;
 use App\Models\ReviewAudit;
 use App\Models\Transaction;
 use App\Support\CategorizationResult;
@@ -25,8 +26,9 @@ final class TransactionReviewService
         ?int $confidence = null,
         ?string $explanation = null,
         ?string $idempotencyKey = null,
+        ?int $categoryId = null,
     ): Transaction {
-        return DB::transaction(function () use ($transaction, $bucket, $subcategory, $source, $confidence, $explanation, $idempotencyKey) {
+        return DB::transaction(function () use ($transaction, $bucket, $subcategory, $source, $confidence, $explanation, $idempotencyKey, $categoryId) {
             $transaction = Transaction::query()->lockForUpdate()->findOrFail($transaction->id);
 
             if ($idempotencyKey !== null) {
@@ -43,9 +45,19 @@ final class TransactionReviewService
                 throw new InvalidArgumentException('Transaction is already reviewed.');
             }
 
+            if ($categoryId !== null) {
+                $category = Category::query()->findOrFail($categoryId);
+                $bucket = $category->bucket;
+                $subcategory = $category->name;
+            }
+
             $previous = [
                 'bucket' => $transaction->bucket?->value,
                 'subcategory' => $transaction->subcategory,
+                'category_id' => $transaction->category_id,
+                'merchant' => $transaction->merchant,
+                'raw_merchant_descriptor' => $transaction->raw_merchant_descriptor,
+                'merchant_id' => $transaction->merchant_id,
                 'reviewed_at' => $transaction->reviewed_at?->toISOString(),
                 'review_source' => $transaction->review_source?->value,
                 'confidence' => $transaction->confidence,
@@ -54,6 +66,7 @@ final class TransactionReviewService
             $transaction->update([
                 'bucket' => $bucket,
                 'subcategory' => $subcategory,
+                'category_id' => $categoryId,
                 'reviewed_at' => now(),
                 'review_source' => $source,
                 'confidence' => $confidence,
@@ -92,16 +105,34 @@ final class TransactionReviewService
                 ->first();
 
             $previous = $audit?->previous_state ?? [];
+            $rawDescriptor = $transaction->raw_merchant_descriptor;
+            $merchantId = $transaction->merchant_id;
+            $categoryId = $previous['category_id'] ?? null;
+            $bucket = $previous['bucket'] ?? null;
+            $subcategory = $previous['subcategory'] ?? null;
 
-            $transaction->update([
-                'bucket' => $previous['bucket'] ?? null,
-                'subcategory' => $previous['subcategory'] ?? null,
+            if ($categoryId !== null) {
+                $category = Category::query()->find($categoryId);
+                if ($category !== null) {
+                    $bucket = $category->bucket->value;
+                    $subcategory = $category->name;
+                }
+            }
+
+            $transaction->fill([
+                'bucket' => $bucket,
+                'subcategory' => $subcategory,
+                'category_id' => $categoryId,
+                'merchant' => $previous['merchant'] ?? $transaction->merchant,
+                'raw_merchant_descriptor' => $previous['raw_merchant_descriptor'] ?? $rawDescriptor,
+                'merchant_id' => array_key_exists('merchant_id', $previous) ? $previous['merchant_id'] : $merchantId,
                 'reviewed_at' => null,
                 'review_source' => null,
                 'confidence' => null,
                 'review_explanation' => null,
                 'idempotency_key' => null,
             ]);
+            $transaction->saveQuietly();
 
             ReviewAudit::query()->create([
                 'transaction_id' => $transaction->id,
@@ -114,6 +145,7 @@ final class TransactionReviewService
                 'previous_state' => [
                     'bucket' => $audit?->bucket?->value,
                     'subcategory' => $audit?->subcategory,
+                    'category_id' => $previous['category_id'] ?? null,
                 ],
             ]);
 

@@ -3,7 +3,10 @@ import { computed, shallowRef, watch } from 'vue'
 import type { Transaction } from '../../types/transaction'
 import { groupByDate } from '../../utils/dates'
 import {
+  displayMerchantName,
   formatSigned,
+  hasDistinctRawDescriptor,
+  rawMerchantDescriptor,
   signedAmountCents,
   summarizeCashFlow,
 } from '../../utils/transactions'
@@ -41,6 +44,10 @@ function dayNet(transactions: Transaction[]): number {
 function loadMore(): void {
   visibleCount.value += pageSize
 }
+
+function categoryLabel(tx: Transaction): string {
+  return tx.detailed_category?.name ?? tx.subcategory ?? ''
+}
 </script>
 
 <template>
@@ -73,12 +80,16 @@ function loadMore(): void {
             class="row"
             @click="emit('edit', tx)"
           >
-            <span class="sr-only">Edit {{ tx.merchant }}</span>
-            <MerchantAvatar :name="tx.merchant" :size="40" />
+            <span class="sr-only">Edit {{ displayMerchantName(tx) }}</span>
+            <MerchantAvatar :name="displayMerchantName(tx)" :size="40" />
             <div class="copy">
-              <strong>{{ tx.merchant }}</strong>
+              <strong>{{ displayMerchantName(tx) }}</strong>
+              <span v-if="hasDistinctRawDescriptor(tx)" class="raw">
+                {{ rawMerchantDescriptor(tx) }}
+              </span>
               <span
                 >{{ tx.account?.name ?? 'No account' }} · {{ tx.kind
+                }}{{ categoryLabel(tx) ? ` · ${categoryLabel(tx)}` : ''
                 }}{{ tx.reviewed ? '' : ' · Queued' }}</span
               >
             </div>
@@ -176,6 +187,11 @@ function loadMore(): void {
 .copy span {
   color: var(--text-muted);
   font-size: 0.72rem;
+}
+
+.copy .raw {
+  color: var(--text-dim);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 .amount {

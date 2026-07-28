@@ -7,6 +7,8 @@ use App\Enums\ReviewSource;
 use App\Enums\TransactionKind;
 use App\Models\Account;
 use App\Models\CategorizationRule;
+use App\Models\Category;
+use App\Models\Merchant;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Services\RulesAndHeuristicsCategorizer;
@@ -60,6 +62,39 @@ class RulesAndHeuristicsCategorizerTest extends TestCase
         $this->assertSame('groceries', $result->subcategory);
         $this->assertSame(86, $result->confidence);
         $this->assertTrue($result->isConfident());
+    }
+
+    #[TestDox('Rules targeting archived categories are ignored')]
+    public function test_rules_with_archived_categories_are_ignored(): void
+    {
+        $category = Category::factory()->for($this->user)->create([
+            'bucket' => Bucket::Want,
+            'name' => 'Archived Treats',
+        ]);
+        CategorizationRule::factory()->create([
+            'user_id' => $this->user->id,
+            'name' => 'Archived category rule',
+            'merchant_contains' => 'archive only merchant',
+            'category_id' => $category->id,
+            'target_bucket' => Bucket::Want,
+            'target_subcategory' => 'archived treats',
+            'enabled' => true,
+            'auto_review' => true,
+            'priority' => 1,
+        ]);
+        $category->update(['archived_at' => now()]);
+        $transaction = Transaction::factory()->unreviewed()->create([
+            'user_id' => $this->user->id,
+            'merchant' => 'Archive Only Merchant',
+            'kind' => TransactionKind::Expense,
+        ]);
+
+        $result = $this->categorizer->categorize($transaction);
+
+        $this->assertSame(ReviewSource::Heuristic, $result->source);
+        $this->assertNull($result->bucket);
+        $this->assertNull($result->categoryId);
+        $this->assertNull($result->ruleId);
     }
 
     #[TestDox('Ignores account-scoped rules when the transaction account does not match')]
@@ -280,5 +315,82 @@ class RulesAndHeuristicsCategorizerTest extends TestCase
         $this->assertSame(Bucket::Need, $result->bucket);
         $this->assertSame('household', $result->subcategory);
         $this->assertSame($first->id, $result->ruleId);
+    }
+
+    #[TestDox('Canonical merchant rules match via MerchantResolver aliases')]
+    public function test_canonical_merchant_rules_match_via_aliases(): void
+    {
+        $merchant = Merchant::query()->where('normalized_name', 'netflix')->firstOrFail();
+        $category = Category::query()
+            ->whereNull('user_id')
+            ->where('bucket', Bucket::Want)
+            ->where('normalized_name', 'entertainment')
+            ->firstOrFail();
+
+        $rule = CategorizationRule::factory()->create([
+            'user_id' => $this->user->id,
+            'name' => 'Netflix entertainment',
+            'merchant_contains' => 'netflix',
+            'merchant_id' => $merchant->id,
+            'category_id' => $category->id,
+            'target_bucket' => Bucket::Want,
+            'target_subcategory' => 'entertainment',
+            'auto_review' => true,
+            'priority' => 1,
+        ]);
+
+        $transaction = Transaction::factory()->unreviewed()->create([
+            'user_id' => $this->user->id,
+            'merchant' => 'NETFLIX.COM 408724',
+            'raw_merchant_descriptor' => 'NETFLIX.COM 408724',
+            'kind' => TransactionKind::Expense,
+        ]);
+
+        $result = $this->categorizer->categorize($transaction);
+
+        $this->assertSame(ReviewSource::Rule, $result->source);
+        $this->assertSame(Bucket::Want, $result->bucket);
+        $this->assertSame('Entertainment', $result->subcategory);
+        $this->assertSame($category->id, $result->categoryId);
+        $this->assertSame($rule->id, $result->ruleId);
+        $this->assertTrue($result->isConfident());
+        $this->assertStringContainsString('Netflix', $result->explanation);
+    }
+
+    #[TestDox('Canonical merchant rules run before heuristics')]
+    public function test_canonical_merchant_rules_run_before_heuristics(): void
+    {
+        $merchant = Merchant::query()->where('normalized_name', 'chipotle')->firstOrFail();
+        $category = Category::query()
+            ->whereNull('user_id')
+            ->where('bucket', Bucket::Need)
+            ->where('normalized_name', 'groceries')
+            ->firstOrFail();
+
+        CategorizationRule::factory()->create([
+            'user_id' => $this->user->id,
+            'name' => 'Chipotle as groceries',
+            'merchant_id' => $merchant->id,
+            'category_id' => $category->id,
+            'target_bucket' => Bucket::Need,
+            'target_subcategory' => 'groceries',
+            'auto_review' => true,
+            'priority' => 10,
+        ]);
+
+        $transaction = Transaction::factory()->unreviewed()->create([
+            'user_id' => $this->user->id,
+            'merchant' => 'Chipotle Downtown',
+            'raw_merchant_descriptor' => 'Chipotle Downtown',
+            'kind' => TransactionKind::Expense,
+        ]);
+
+        $result = $this->categorizer->categorize($transaction);
+
+        $this->assertSame(ReviewSource::Rule, $result->source);
+        $this->assertSame(Bucket::Need, $result->bucket);
+        $this->assertSame('Groceries', $result->subcategory);
+        $this->assertSame($category->id, $result->categoryId);
+        $this->assertTrue($result->isConfident());
     }
 }

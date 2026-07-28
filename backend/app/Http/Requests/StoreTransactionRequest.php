@@ -37,11 +37,22 @@ class StoreTransactionRequest extends FormRequest
             'amount_cents' => ['required', 'integer', 'min:0', 'max:100000000'],
             'kind' => ['required', Rule::enum(TransactionKind::class)],
             'bucket' => [
-                Rule::requiredIf(fn () => $this->boolean('reviewed')),
+                Rule::requiredIf(fn () => $this->boolean('reviewed') && ! $this->filled('category_id')),
                 'nullable',
                 Rule::enum(Bucket::class),
             ],
             'subcategory' => ['nullable', 'string', 'max:100'],
+            'category_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('categories', 'id')->where(function ($query) use ($userId): void {
+                    $query->whereNull('archived_at')
+                        ->where(function ($visible) use ($userId): void {
+                            $visible->whereNull('user_id')
+                                ->orWhere('user_id', $userId);
+                        });
+                }),
+            ],
             'transaction_date' => ['required', 'date'],
             'account_id' => [
                 'nullable',
