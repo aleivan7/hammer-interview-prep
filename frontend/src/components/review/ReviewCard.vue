@@ -1,22 +1,32 @@
 <script setup lang="ts">
-import { watch } from 'vue'
+import { computed, shallowRef, watch } from 'vue'
 import { BUCKET_LABELS, type Bucket } from '../../types/bucket'
+import type { Category } from '../../types/category'
 import type { Transaction, TransactionSuggestion } from '../../types/transaction'
 import { formatDate } from '../../utils/money'
-import { formatSigned, signedAmountCents } from '../../utils/transactions'
+import {
+  displayMerchantName,
+  formatSigned,
+  hasDistinctRawDescriptor,
+  rawMerchantDescriptor,
+  signedAmountCents,
+} from '../../utils/transactions'
 import { useCardSwipe } from '../../composables/useCardSwipe'
 import MerchantAvatar from '../ui/MerchantAvatar.vue'
 
 const props = defineProps<{
   transaction: Transaction
   suggestion: TransactionSuggestion | null
+  categories: Category[]
   updating: boolean
 }>()
 
 const emit = defineEmits<{
-  categorize: [bucket: Bucket]
+  categorize: [payload: { bucket: Bucket; category_id?: number | null }]
   exitStart: []
 }>()
+
+const pendingCategoryId = shallowRef<number | null>(null)
 
 const {
   hint,
@@ -33,8 +43,25 @@ const {
     return false
   }
 
-  emit('categorize', bucket)
+  emit('categorize', {
+    bucket,
+    ...(pendingCategoryId.value != null
+      ? { category_id: pendingCategoryId.value }
+      : {}),
+  })
+  pendingCategoryId.value = null
   return true
+})
+
+const groupedCategories = computed(() => {
+  const buckets: Bucket[] = ['need', 'want', 'savings']
+  return buckets.map((bucket) => ({
+    bucket,
+    label: BUCKET_LABELS[bucket],
+    categories: props.categories.filter(
+      (category) => category.bucket === bucket && !category.archived_at,
+    ),
+  }))
 })
 
 watch(exiting, (isExiting) => {
@@ -43,11 +70,15 @@ watch(exiting, (isExiting) => {
   }
 })
 
-async function exitThenCategorize(bucket: Bucket): Promise<void> {
+async function exitThenCategorize(
+  bucket: Bucket,
+  categoryId: number | null = null,
+): Promise<void> {
   if (props.updating || exiting.value) {
     return
   }
 
+  pendingCategoryId.value = categoryId
   await beginExit(bucket)
 }
 
@@ -58,8 +89,22 @@ function onSelectChange(event: Event): void {
   }
 }
 
+function onCategoryChange(event: Event): void {
+  const value = (event.target as HTMLSelectElement).value
+  if (!value) {
+    return
+  }
+
+  const category = props.categories.find((item) => item.id === Number(value))
+  if (!category) {
+    return
+  }
+
+  void exitThenCategorize(category.bucket, category.id)
+}
+
 defineExpose({
-  beginExit: exitThenCategorize,
+  beginExit: (bucket: Bucket) => exitThenCategorize(bucket),
   reset,
   exiting,
 })
@@ -78,15 +123,18 @@ defineExpose({
   >
     <p v-if="hint" class="hint-label">{{ BUCKET_LABELS[hint] }}</p>
 
-    <MerchantAvatar :name="transaction.merchant" :size="56" />
-    <h2>{{ transaction.merchant }}</h2>
+    <MerchantAvatar :name="displayMerchantName(transaction)" :size="56" />
+    <h2>{{ displayMerchantName(transaction) }}</h2>
+    <p v-if="hasDistinctRawDescriptor(transaction)" class="raw">
+      {{ rawMerchantDescriptor(transaction) }}
+    </p>
     <p class="date">{{ formatDate(transaction.transaction_date) }}</p>
     <p class="amount money" :class="signedAmountCents(transaction) > 0 ? 'credit' : 'debit'">
       {{ formatSigned(signedAmountCents(transaction)) }}
     </p>
 
     <label class="bucket-select">
-      <span class="sr-only">Category</span>
+      <span class="sr-only">Bucket</span>
       <select
         :value="suggestion?.bucket ?? ''"
         :disabled="updating || exiting"
@@ -97,6 +145,31 @@ defineExpose({
         <option value="need">Needs</option>
         <option value="want">Wants</option>
         <option value="savings">Savings</option>
+      </select>
+    </label>
+
+    <label class="category-select">
+      <span class="sr-only">Detailed category</span>
+      <select
+        value=""
+        :disabled="updating || exiting"
+        @change="onCategoryChange"
+        @pointerdown.stop
+      >
+        <option value="">Optional category…</option>
+        <optgroup
+          v-for="group in groupedCategories"
+          :key="group.bucket"
+          :label="group.label"
+        >
+          <option
+            v-for="category in group.categories"
+            :key="category.id"
+            :value="category.id"
+          >
+            {{ category.name }}
+          </option>
+        </optgroup>
       </select>
     </label>
 
@@ -170,10 +243,16 @@ h2 {
   font-weight: 600;
 }
 
+.raw,
 .date {
   margin: 0;
   color: var(--text-muted);
   font-size: 0.78rem;
+}
+
+.raw {
+  color: var(--text-dim);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 .amount {
@@ -182,13 +261,19 @@ h2 {
   font-weight: 700;
 }
 
-.bucket-select select {
+.bucket-select select,
+.category-select select {
   min-height: 2.25rem;
   padding: 0.4rem 0.8rem;
   border-radius: var(--radius-pill);
   border: 1px solid var(--border-strong);
   background: var(--bg-soft);
   color: var(--text);
+}
+
+.category-select select {
+  border-radius: var(--radius-sm);
+  max-width: 16rem;
 }
 
 .suggestion {
